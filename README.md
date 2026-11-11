@@ -34,6 +34,7 @@ tokoku_native/
 │   └── style.css
 ├── config.php
 ├── index.php
+├── struk.php
 └── db_tokoku.sql
 ```
 

@@ -1,129 +1,57 @@
-# 🛒 TokoKu — Aplikasi Kasir dan Manajemen Toko
+# TokoKu Admin Panel — PHP Native
 
-TokoKu adalah aplikasi kasir berbasis web yang dibuat menggunakan **PHP Native dan MySQL**. Aplikasi ini membantu mengelola produk, pelanggan, keranjang belanja, transaksi, serta laporan toko melalui satu sistem.
+## Kebutuhan
+- XAMPP (Apache + MySQL/MariaDB)
+- PHP 8.0+
+- Database `db_tokoku2`
 
-## ✨ Fitur Utama
+## Instalasi
+1. Ekstrak folder `tokoku_native` ke `C:\xampp\htdocs\`.
+2. Jalankan Apache dan MySQL dari XAMPP.
+3. Buka phpMyAdmin: `http://localhost/phpmyadmin`.
+4. Jika database `db_tokoku` belum dibuat, buat database tersebut lalu import `db_tokoku.sql`.
+   - Jika database lama sudah berisi tabel pelanggan dan transaksi, **jangan import ulang seluruh dump**. Cukup pilih database `db_tokoku` di phpMyAdmin, lalu import file `upgrade_katalog_produk.sql` satu kali.
+5. Periksa `config.php`. Database yang dipakai adalah `db_tokoku2`. Default XAMPP biasanya:
+   - host: `localhost`
+   - database: `db_tokoku`
+   - user: `root`
+   - password: kosong
+6. Buka `http://localhost/tokoku_native/`.
 
-- **Login Pengguna** — Sistem autentikasi dengan hak akses Admin dan Kasir.
-- **Dashboard** — Menampilkan ringkasan aktivitas toko.
-- **Manajemen Produk** — Mengelola data produk dan informasi stok.
-- **Keranjang Belanja** — Menambahkan, mengubah, dan menghapus produk dari keranjang.
-- **Checkout** — Memproses transaksi dengan pilihan pembayaran tunai, QRIS, dan debit.
-- **Manajemen Transaksi** — Melihat dan mengelola data transaksi serta status pembayaran.
-- **Data Pelanggan** — Menampilkan dan mengelola informasi pelanggan.
-- **Laporan** — Menampilkan rekap data pelanggan dan transaksi menggunakan database VIEW.
-- **Cetak dan PDF** — Mencetak laporan atau mengunduhnya dalam format PDF.
-- **Pengujian Database** — Tersedia halaman untuk mempelajari dan menguji VIEW, JOIN, Subquery, Stored Procedure, Function, Trigger, COMMIT & ROLLBACK, serta EXPLAIN.
+## Fitur
+- Dashboard statistik dari tabel pelanggan dan transaksi.
+- Katalog produk bergaya marketplace: kartu produk, foto, diskon, rating, kategori, pencarian, dan pengurutan.
+- CRUD produk lengkap (tambah, lihat, edit, hapus), unggah/ganti foto, dan keranjang POS berbasis session.
+- CRUD pelanggan.
+- Tambah dan daftar transaksi.
+- VIEW: `view_pelanggan`, `view_total_belanja`, `view_transaksi_pelanggan`.
+- JOIN: `tbl_transaksi` dan `tbl_pelanggan`.
+- Subquery analisis total belanja pelanggan di atas rata-rata.
+- Stored Procedure: `TampilPelanggan`, `CariPelanggan`, `HitungPelanggan`, `LaporanTransaksi`, `TambahPelanggan`.
+- Function: `HitungDiskon`, `HitungPajak`, `HitungTotal`, `KategoriBelanja`, `KonversiNilai`.
+- Trigger dan tabel log.
+- Uji transaksi COMMIT / ROLLBACK.
+- EXPLAIN query.
 
-## 🧰 Teknologi yang Digunakan
+## Login dan hak akses staf
+- Sistem menggunakan dua role staf: **admin** dan **kasir**. Pelanggan toko offline tidak perlu login.
+- Login admin awal: `adminbaru` / `Admin123!`
+- Login kasir awal: `kasir` / `Kasir123!`
+- Akun lama dengan role `user` otomatis dimigrasikan menjadi `kasir` saat aplikasi dibuka.
+- Admin dapat mengelola produk (tambah, lihat, edit, hapus), pelanggan, laporan, dan menu pengujian database.
+- Kasir dapat melihat katalog, mengelola keranjang, dan menyelesaikan transaksi POS. Kasir tidak dapat mengubah/menghapus produk.
+- Checkout toko offline: pelanggan opsional (kosong = Pelanggan Umum), metode Tunai/QRIS/Kartu Debit, transaksi langsung tercatat lunas dan stok otomatis berkurang.
+- Ganti password akun awal setelah login sebelum digunakan secara rutin.
 
-| Teknologi | Kegunaan |
-|---|---|
-| PHP Native | Backend aplikasi |
-| MySQL | Database |
-| HTML5 | Struktur halaman |
-| CSS3 | Tampilan antarmuka |
-| JavaScript | Interaksi halaman |
-| XAMPP | Server lokal |
+## Catatan keamanan
+- Gunakan hanya di localhost atau jaringan toko yang tepercaya. Sebelum dipublikasikan, tambahkan CSRF token, pembatasan percobaan login, validasi tambahan, HTTPS, dan pengamanan konfigurasi.
+- Tabel `tbl_produk` ditambahkan sebagai pelengkap tanpa mengubah tabel pelanggan dan transaksi yang sudah ada. Produk contoh otomatis tersedia setelah SQL diimpor.
+- Chart.js dan Google Fonts dimuat dari CDN sehingga perlu koneksi internet saat halaman dibuka.
 
-## 📁 Struktur Project
-
-```text
-tokoku_native/
-├── assets/
-│   └── style.css
-├── config.php
-├── index.php
-├── struk.php
-└── db_tokoku.sql
-```
-
-*Struktur di atas merupakan gambaran file utama proyek.*
-
-## ⚙️ Cara Instalasi
-
-Ikuti langkah berikut untuk menjalankan aplikasi di komputer lokal.
-
-### 1. Clone Repository
-
-```bash
-git clone https://github.com/USERNAME/REPOSITORY.git
-```
-
-Ganti `USERNAME` dan `REPOSITORY` sesuai alamat repository GitHub kamu.
-
-### 2. Pindahkan Folder
-
-Pindahkan folder proyek ke direktori `htdocs` XAMPP.
-
-Contoh:
-
-```text
-C:/xampp/htdocs/tokoku_native/
-```
-
-### 3. Jalankan XAMPP
-
-Aktifkan:
-- Apache
-- MySQL
-
-### 4. Buat Database
-
-1. Buka phpMyAdmin melalui `http://localhost/phpmyadmin`.
-2. Buat database dengan nama `db_tokoku`.
-3. Pilih database tersebut.
-4. Import file `db_tokoku.sql`.
-
-### 5. Konfigurasi Database
-
-Buka file `config.php`, kemudian sesuaikan konfigurasi koneksi database dengan pengaturan MySQL di komputer kamu.
-
-### 6. Jalankan Aplikasi
-
-Buka browser dan akses:
-
-```text
-http://localhost/tokoku_native/
-```
-
-Login menggunakan akun yang tersedia di database atau akun yang telah dibuat.
-
-## 🔐 Hak Akses Pengguna
-
-| Fitur | Admin | Kasir |
-|---|:---:|:---:|
-| Dashboard | ✅ | ✅ |
-| Produk | ✅ | ✅ |
-| Keranjang | ✅ | ✅ |
-| Transaksi | ✅ | ✅ |
-| Laporan | ✅ | ✅ |
-| Manajemen Pelanggan | ✅ | ❌ |
-| Pengujian Database | ✅ | ❌ |
-
-## 🗄️ Database
-
-Aplikasi menggunakan database MySQL dengan beberapa tabel dan VIEW untuk mendukung pengelolaan data toko.
-
-Beberapa VIEW yang digunakan pada halaman laporan:
-
-- `view_pelanggan`
-- `view_total_belanja`
-- `view_transaksi_pelanggan`
-
-## 📌 Catatan
-
-- Aplikasi ini ditujukan untuk dijalankan pada server lokal menggunakan XAMPP.
-- Pastikan database sudah diimpor sebelum menjalankan aplikasi.
-- Sesuaikan konfigurasi koneksi database pada `config.php`.
-- Jangan mengunggah password atau informasi akun pribadi ke repository publik.
-
-## 👨‍💻 Pengembang
-
-**TokoKu — Aplikasi Kasir dan Manajemen Toko**
-
-Dibuat sebagai proyek pembelajaran dan pengembangan aplikasi berbasis web menggunakan PHP Native dan MySQL.
-
----
-
-⭐ Jika proyek ini bermanfaat, jangan lupa berikan **Star** pada repository ini!
+## Checkout & Pembayaran (baru)
+- Keranjang → pilih pelanggan + metode pembayaran (QRIS, transfer BCA/BRI/Mandiri, GoPay, DANA, ShopeePay) → "Buat Pesanan & Bayar".
+- Pesanan berstatus **menunggu** dulu. Transaksi baru dihitung lunas setelah admin menekan "Konfirmasi pembayaran diterima".
+- Stok dikurangi saat pesanan dibuat; bila dibatalkan atau lewat batas waktu (24 jam), stok dikembalikan otomatis.
+- Ganti nomor rekening/e-wallet di `config.php`. Untuk QRIS asli, taruh gambar QRIS toko di `assets/qris.png`.
+- Foto produk diunggah dari komputer (JPG/PNG/WEBP/GIF, maks 2 MB), tersimpan di `assets/uploads/`.
+- Konfirmasi pembayaran masih manual (belum terhubung payment gateway seperti Midtrans/Xendit).

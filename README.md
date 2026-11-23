@@ -1,129 +1,162 @@
-# 🛒 TokoKu — Aplikasi Kasir dan Manajemen Toko
+# TokoKu — Aplikasi Kasir & Admin Panel (PHP Native)
 
-TokoKu adalah aplikasi kasir berbasis web yang dibuat menggunakan **PHP Native dan MySQL**. Aplikasi ini membantu mengelola produk, pelanggan, keranjang belanja, transaksi, serta laporan toko melalui satu sistem.
+Aplikasi kasir toko offline berbasis PHP native + MySQL/MariaDB, dengan katalog produk, keranjang POS, member, scanner barcode/RFID, struk, laporan, menu Pengaturan, dan menu pengujian database.
 
-## ✨ Fitur Utama
+## Kebutuhan
+- XAMPP (Apache + MySQL/MariaDB)
+- PHP 8.0+ dengan ekstensi `pdo_mysql` dan `mbstring` (aktif bawaan XAMPP)
+- Database `db_tokoku2`
 
-- **Login Pengguna** — Sistem autentikasi dengan hak akses Admin dan Kasir.
-- **Dashboard** — Menampilkan ringkasan aktivitas toko.
-- **Manajemen Produk** — Mengelola data produk dan informasi stok.
-- **Keranjang Belanja** — Menambahkan, mengubah, dan menghapus produk dari keranjang.
-- **Checkout** — Memproses transaksi dengan pilihan pembayaran tunai, QRIS, dan debit.
-- **Manajemen Transaksi** — Melihat dan mengelola data transaksi serta status pembayaran.
-- **Data Pelanggan** — Menampilkan dan mengelola informasi pelanggan.
-- **Laporan** — Menampilkan rekap data pelanggan dan transaksi menggunakan database VIEW.
-- **Cetak dan PDF** — Mencetak laporan atau mengunduhnya dalam format PDF.
-- **Pengujian Database** — Tersedia halaman untuk mempelajari dan menguji VIEW, JOIN, Subquery, Stored Procedure, Function, Trigger, COMMIT & ROLLBACK, serta EXPLAIN.
+## Instalasi
+1. Ekstrak folder `tokoku_native` ke `C:\xampp\htdocs\`.
+2. Jalankan Apache dan MySQL dari XAMPP.
+3. Buka phpMyAdmin (`http://localhost/phpmyadmin`), buat database `db_tokoku2`, lalu import `db_tokoku2.sql`.
+   - Jika database lama sudah berisi data, **jangan import ulang**. Aplikasi menambah kolom dan tabel yang kurang secara otomatis saat pertama dibuka.
+4. Periksa `config.php`. Bawaan XAMPP: host `localhost`, user `root`, password kosong.
+5. Buka `http://localhost/tokoku_native/`.
 
-## 🧰 Teknologi yang Digunakan
+Tabel `tbl_pengaturan`, `tbl_member`, `tbl_detail_transaksi`, dan kolom tambahan produk/transaksi dibuat otomatis, tidak perlu SQL tambahan.
 
-| Teknologi | Kegunaan |
-|---|---|
-| PHP Native | Backend aplikasi |
-| MySQL | Database |
-| HTML5 | Struktur halaman |
-| CSS3 | Tampilan antarmuka |
-| JavaScript | Interaksi halaman |
-| XAMPP | Server lokal |
-
-## 📁 Struktur Project
-
-```text
+## Struktur folder
+```
 tokoku_native/
-├── assets/
-│   └── style.css
-├── config.php
-├── index.php
-├── struk.php
-└── db_tokoku.sql
+├── index.php            # halaman utama, login, semua menu & aksi form
+├── config.php           # koneksi DB, helper pengaturan, metode pembayaran
+├── struk.php            # cetak struk thermal (+ barcode invoice)
+├── kartu_member.php     # cetak kartu member
+├── barcode.php          # label barcode produk & kartu login staf
+├── README.md
+└── assets/
+    ├── style.css        # gaya tampilan
+    ├── barcode.js       # generator barcode Code 128 (offline)
+    ├── qris.png         # (opsional) gambar QRIS toko
+    └── uploads/
+        ├── .htaccess    # blokir eksekusi PHP
+        ├── produk/      # foto produk
+        ├── toko/        # logo toko & gambar QRIS dari Pengaturan
+        └── bukti/       # bukti pembayaran
 ```
+Folder `produk/`, `toko/`, dan `bukti/` dibuat otomatis saat file pertama diunggah.
 
-*Struktur di atas merupakan gambaran file utama proyek.*
+| File | Fungsi |
+|---|---|
+| `index.php` | Halaman utama, login, semua menu, dan seluruh aksi form |
+| `config.php` | Koneksi database, `setting()` / `pengaturan_simpan()`, metode pembayaran |
+| `struk.php` | Struk 58/80 mm: logo, identitas toko, item, diskon member, barcode invoice |
+| `kartu_member.php` | Kartu member berisi barcode kode member |
+| `barcode.php` | Label barcode produk dan kartu login staf (admin) |
 
-## ⚙️ Cara Instalasi
+## Struktur database (`db_tokoku2`)
+| Tabel | Isi | Kolom penting |
+|---|---|---|
+| `tbl_user` | Akun staf | `id_user`, `username` (unik), `password` (hash), `role` (admin/kasir), `kode_kartu`, `kode_rfid` (hash) |
+| `tbl_pelanggan` | Pelanggan | `id_pelanggan`, `nama_pelanggan`, `kota` |
+| `tbl_member` | Member (pelanggan terdaftar) | `id_member`, `id_pelanggan`, `kode_member`, `kode_rfid`, `no_hp`, `diskon_persen`, `aktif` |
+| `tbl_produk` | Katalog | `id_produk`, `nama_produk`, `kategori`, `harga`, `stok`, `diskon`, `gambar`, `terjual`, `rating`, `barcode` (unik) |
+| `tbl_transaksi` | Header transaksi | `id_transaksi`, `tanggal`, `id_pelanggan`, `id_user`, `id_member`, `total_belanja`, `diskon_member`, `kode_invoice`, `metode_pembayaran`, `status_pembayaran`, `batas_bayar`, `dibayar_pada`, `bukti_bayar` |
+| `tbl_detail_transaksi` | Rincian item | `id_detail`, `id_transaksi`, `id_produk`, `jumlah`, `harga_satuan`, `subtotal` |
+| `tbl_pengaturan` | Pengaturan aplikasi | `kunci` (PK), `nilai`, `diubah_pada` |
+| `log_pelanggan` | Log trigger insert pelanggan | `id_log`, `aktivitas`, `id_pelanggan`, `waktu` |
+| `log_perubahan_pelanggan` | Log trigger update nama | `id_log`, `id_pelanggan`, `nama_lama`, `nama_baru`, `waktu` |
 
-Ikuti langkah berikut untuk menjalankan aplikasi di komputer lokal.
-
-### 1. Clone Repository
-
-```bash
-git clone https://github.com/USERNAME/REPOSITORY.git
+Relasi utama:
 ```
-
-Ganti `USERNAME` dan `REPOSITORY` sesuai alamat repository GitHub kamu.
-
-### 2. Pindahkan Folder
-
-Pindahkan folder proyek ke direktori `htdocs` XAMPP.
-
-Contoh:
-
-```text
-C:/xampp/htdocs/tokoku_native/
+tbl_pelanggan 1─┬─* tbl_transaksi *─1 tbl_user        (id_user: ON DELETE SET NULL)
+                ├─0..1 tbl_member ─* tbl_transaksi    (id_member)
+tbl_transaksi 1─* tbl_detail_transaksi *─1 tbl_produk (detail ikut terhapus bersama transaksi)
 ```
+Status pembayaran: `menunggu`, `dibayar`, `dibatalkan`, `kedaluwarsa`.
 
-### 3. Jalankan XAMPP
+Kunci di `tbl_pengaturan`: `nama_toko`, `alamat_toko`, `telepon_toko`, `footer_struk`, `lebar_struk`, `struk_barcode`, `logo_toko`, `metode_aktif`, `qris_gambar`, `member_diskon_default`, `payment_timeout_hours`, `stok_menipis`. Kunci yang belum tersimpan memakai nilai bawaan.
 
-Aktifkan:
-- Apache
-- MySQL
+Objek database lain: VIEW (`view_pelanggan`, `view_total_belanja`, `view_transaksi_pelanggan`), 5 Stored Procedure, 5 Function, dan 3 Trigger (lihat bagian Pengujian database).
 
-### 4. Buat Database
+## Login dan hak akses
+Dua role staf: **admin** dan **kasir**. Pelanggan toko tidak perlu login.
 
-1. Buka phpMyAdmin melalui `http://localhost/phpmyadmin`.
-2. Buat database dengan nama `db_tokoku`.
-3. Pilih database tersebut.
-4. Import file `db_tokoku.sql`.
+| Role | Akun awal | Password awal |
+|---|---|---|
+| Admin | `adminbaru` | `Admin123!` |
+| Kasir | `kasir` | `Kasir123!` |
 
-### 5. Konfigurasi Database
+**Ganti password akun awal segera setelah login** (menu Pengaturan > Akun Saya).
 
-Buka file `config.php`, kemudian sesuaikan konfigurasi koneksi database dengan pengaturan MySQL di komputer kamu.
+- **Admin:** semua menu — produk, pelanggan, member, transaksi, laporan, pengaturan, cetak barcode, dan pengujian database.
+- **Kasir:** katalog, keranjang, member, transaksi, laporan, dan pengaturan akun sendiri. Kasir tidak bisa mengubah/menghapus produk.
+- Perubahan role atau penghapusan akun oleh admin langsung berlaku pada sesi pengguna tersebut di permintaan berikutnya.
 
-### 6. Jalankan Aplikasi
+### Halaman login
+Tampilan gelap dengan latar bergerak, logo dan nama toko dari Pengaturan, tombol lihat/sembunyikan password, animasi getar saat gagal, dan area tap kartu RFID/barcode. Animasi otomatis mati bila perangkat memakai pengaturan "kurangi gerakan".
 
-Buka browser dan akses:
+## Menu Pengaturan
+Buka dari sidebar **Pengaturan** atau klik inisial nama di pojok kanan atas.
 
-```text
-http://localhost/tokoku_native/
-```
+### Akun Saya (admin & kasir)
+- Ubah nama tampilan.
+- Ganti password: wajib memasukkan password saat ini, minimal 8 karakter, harus berbeda dari yang lama, dan perlu konfirmasi.
 
-Login menggunakan akun yang tersedia di database atau akun yang telah dibuat.
+### Toko & Struk (admin)
+| Pengaturan | Keterangan |
+|---|---|
+| Logo toko | Unggah JPG/PNG/WEBP/GIF (maks 2 MB). Tampil di sidebar, halaman login, ikon tab browser, dan struk (hitam-putih). Centang "Hapus logo" untuk kembali ke ikon bawaan. |
+| Nama toko | Dipakai di sidebar, login, judul halaman, struk, dan kartu member |
+| Telepon, alamat | Dicetak di kepala struk (opsional) |
+| Pesan penutup | Teks di bawah struk |
+| Lebar kertas | 58 mm atau 80 mm |
+| Barcode di struk | Cetak barcode nomor invoice (bawaan aktif) |
 
-## 🔐 Hak Akses Pengguna
+Pratinjau struk di sebelah kanan berubah langsung saat Anda mengetik atau memilih logo.
 
-| Fitur | Admin | Kasir |
-|---|:---:|:---:|
-| Dashboard | ✅ | ✅ |
-| Produk | ✅ | ✅ |
-| Keranjang | ✅ | ✅ |
-| Transaksi | ✅ | ✅ |
-| Laporan | ✅ | ✅ |
-| Manajemen Pelanggan | ✅ | ❌ |
-| Pengujian Database | ✅ | ❌ |
+### Transaksi & Member (admin)
+| Pengaturan | Keterangan |
+|---|---|
+| Metode pembayaran | Tunai / QRIS / Kartu Debit. Hanya yang dicentang tampil di checkout; minimal satu harus aktif. |
+| Gambar QRIS | Menggantikan `assets/qris.png`. Jika kosong dipakai `assets/qris.png` atau QR contoh (demo). |
+| Diskon member bawaan | Nilai awal untuk member baru, 0–50%. Member yang sudah ada tidak berubah. |
+| Batas waktu bayar QRIS | 1–168 jam. Pesanan QRIS yang lewat batas otomatis kedaluwarsa dan stok dikembalikan. |
+| Peringatan stok menipis | Produk dengan stok ≤ angka ini diberi tanda di katalog, ada filter **Stok menipis**, dan peringatan di dashboard. Isi 0 untuk mematikan. |
 
-## 🗄️ Database
+### Akun Staf (admin)
+- Tambah akun (username 3–30 karakter: huruf kecil, angka, `.` `-` `_`; password minimal 8 karakter).
+- Ubah nama, role, dan reset password.
+- Hapus akun (riwayat transaksinya tetap tersimpan).
+- Aturan pengaman: tidak bisa menghapus atau menurunkan role akun sendiri, dan harus selalu ada minimal satu admin.
+- Kartu login barcode/RFID tetap diatur di **Cetak Barcode > Kartu Login Staf**.
 
-Aplikasi menggunakan database MySQL dengan beberapa tabel dan VIEW untuk mendukung pengelolaan data toko.
+> Pengaturan disimpan di tabel `tbl_pengaturan`. Nilai `$PAYMENT_TIMEOUT_HOURS` dan `$MEMBER_DISKON_DEFAULT` di `config.php` kini dibaca dari tabel ini, jadi tidak perlu diedit manual.
 
-Beberapa VIEW yang digunakan pada halaman laporan:
+## Kasir & transaksi
+- **Katalog** bergaya marketplace: kartu produk, foto, diskon, rating, kategori, pencarian, dan pengurutan.
+- **Keranjang:** jumlah diubah dengan tombol **−** / **+** atau diketik, dan tersimpan otomatis. Jika jumlah melebihi stok, muncul pemberitahuan dan jumlah disesuaikan. Tombol **＋ Keranjang** menolak penambahan bila stok sudah habis di keranjang.
+- **Checkout:** pelanggan opsional (kosong = Pelanggan Umum). Tunai dan Debit langsung tercatat lunas; QRIS berstatus *menunggu* sampai admin menekan **Konfirmasi pembayaran diterima**. Stok berkurang saat pesanan dibuat dan dikembalikan bila dibatalkan atau kedaluwarsa.
+- **Struk:** dicetak dari halaman detail transaksi lunas, berisi logo, identitas toko, rincian item, diskon member, dan **barcode nomor invoice** (transaksi manual memakai `TRX` + ID).
 
-- `view_pelanggan`
-- `view_total_belanja`
-- `view_transaksi_pelanggan`
+## Scanner barcode & RFID
+- Dukung scanner/reader **USB mode keyboard** (mengetik kode lalu Enter). Tanpa driver.
+- **Belanja:** di Katalog atau Keranjang, scan barcode produk; tiap scan menambah 1 pcs. Barcode produk dibuat otomatis (12 digit) atau isi barcode pabrik di form produk. Label dicetak dari **Cetak Barcode**.
+- **Login dengan kartu:** admin membuat kartu staf atau mendaftarkan RFID di **Cetak Barcode > Kartu Login Staf**; staf cukup tap kartu di halaman login. Kode kartu hanya disimpan sebagai hash.
+- Perlakukan kartu staf seperti kunci. UID RFID murah bisa disalin, jangan tinggalkan kartu admin di meja kasir.
 
-## 📌 Catatan
+## Member & potongan harga
+- Menu **Member**: daftarkan member baru atau jadikan pelanggan lama sebagai member. Tiap member mendapat kode barcode 12 digit (awalan 30) dan boleh punya kartu RFID.
+- Admin dapat mengubah persen diskon (maks 50%), status aktif/nonaktif, dan RFID tiap member.
+- Saat transaksi, scan kartu member (barcode/RFID) atau ketik kode/nomor HP/nama di keranjang. Diskon dihitung dari total setelah diskon produk dan tampil di keranjang, invoice, dan struk. Member nonaktif tidak mendapat diskon.
+- Kartu member dicetak dari tombol **Cetak kartu**.
 
-- Aplikasi ini ditujukan untuk dijalankan pada server lokal menggunakan XAMPP.
-- Pastikan database sudah diimpor sebelum menjalankan aplikasi.
-- Sesuaikan konfigurasi koneksi database pada `config.php`.
-- Jangan mengunggah password atau informasi akun pribadi ke repository publik.
+## Pengujian database (admin)
+- VIEW: `view_pelanggan`, `view_total_belanja`, `view_transaksi_pelanggan`
+- JOIN `tbl_transaksi` dan `tbl_pelanggan`; subquery pelanggan di atas rata-rata
+- Stored Procedure: `TampilPelanggan`, `CariPelanggan`, `HitungPelanggan`, `LaporanTransaksi`, `TambahPelanggan`
+- Function: `HitungDiskon`, `HitungPajak`, `HitungTotal`, `KategoriBelanja`, `KonversiNilai`
+- Trigger dan tabel log, uji COMMIT / ROLLBACK, dan EXPLAIN query
 
-## 👨‍💻 Pengembang
+## Catatan keamanan
+- Gunakan hanya di localhost atau jaringan toko yang tepercaya.
+- Form Pengaturan memakai token CSRF. Form lain dan login belum; tambahkan CSRF, pembatasan percobaan login, HTTPS, dan pengamanan `config.php` sebelum dipublikasikan.
+- Folder `assets/uploads/` memblokir eksekusi file PHP lewat `.htaccess`.
+- Konfirmasi pembayaran masih manual (belum terhubung Midtrans/Xendit). QRIS bawaan adalah demo.
+- Chart.js dan Google Fonts dimuat dari CDN, jadi perlu internet saat halaman dibuka.
 
-**TokoKu — Aplikasi Kasir dan Manajemen Toko**
 
-Dibuat sebagai proyek pembelajaran dan pengembangan aplikasi berbasis web menggunakan PHP Native dan MySQL.
-
----
-
-⭐ Jika proyek ini bermanfaat, jangan lupa berikan **Star** pada repository ini!
+menggunakan claude ai
+email:rangersr646@gmail.com

@@ -1,11 +1,11 @@
 -- phpMyAdmin SQL Dump
--- version 5.2.1
+-- version 5.2.3
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Nov 11, 2026 at 02:12 AM
--- Server version: 10.4.32-MariaDB
--- PHP Version: 8.1.25
+-- Generation Time: Nov 23, 2026 at 05:22 AM
+-- Server version: 10.11.16-MariaDB
+-- PHP Version: 8.4.27
 
 SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
 START TRANSACTION;
@@ -112,7 +112,19 @@ CREATE TABLE `log_pelanggan` (
 
 INSERT INTO `log_pelanggan` (`id_log`, `aktivitas`, `id_pelanggan`, `waktu`) VALUES
 (1, 'INSERT PELANGGAN', 6, '2026-11-09 04:11:20'),
-(2, 'INSERT PELANGGAN', 7, '2026-11-11 00:56:22');
+(2, 'INSERT PELANGGAN', 7, '2026-11-11 00:56:22'),
+(3, 'INSERT PELANGGAN', 8, '2026-11-23 02:18:54'),
+(4, 'INSERT PELANGGAN', 9, '2026-11-23 02:35:58'),
+(5, 'INSERT PELANGGAN', 10, '2026-11-23 02:37:51'),
+(6, 'INSERT PELANGGAN', 11, '2026-11-23 02:38:59'),
+(7, 'INSERT PELANGGAN', 12, '2026-11-23 03:04:31'),
+(8, 'INSERT PELANGGAN', 13, '2026-11-23 03:05:30'),
+(9, 'INSERT PELANGGAN', 14, '2026-11-23 03:49:43'),
+(10, 'INSERT PELANGGAN', 15, '2026-11-23 03:52:37'),
+(11, 'INSERT PELANGGAN', 16, '2026-11-23 03:54:24'),
+(12, 'INSERT PELANGGAN', 17, '2026-11-23 04:01:24'),
+(13, 'INSERT PELANGGAN', 18, '2026-11-23 04:04:16'),
+(14, 'INSERT PELANGGAN', 19, '2026-11-23 04:16:49');
 
 -- --------------------------------------------------------
 
@@ -155,7 +167,48 @@ CREATE TABLE `tbl_detail_transaksi` (
 --
 
 INSERT INTO `tbl_detail_transaksi` (`id_detail`, `id_transaksi`, `id_produk`, `jumlah`, `harga_satuan`, `subtotal`) VALUES
-(1, 5, 4, 1, 4000.00, 4000.00);
+(1, 5, 4, 1, 4000.00, 4000.00),
+(2, 6, 5, 1, 3500.00, 3500.00),
+(3, 7, 5, 2, 3500.00, 7000.00),
+(4, 8, 4, 3, 4000.00, 12000.00),
+(5, 9, 3, 1, 17000.00, 17000.00),
+(6, 9, 4, 1, 4000.00, 4000.00),
+(7, 10, 5, 1, 3500.00, 3500.00),
+(8, 11, 5, 1, 3500.00, 3500.00),
+(9, 12, 5, 1, 3500.00, 3500.00),
+(10, 13, 4, 1, 4000.00, 4000.00),
+(11, 14, 5, 1, 3500.00, 3500.00),
+(12, 15, 5, 1, 3500.00, 3500.00),
+(13, 16, 5, 1, 3500.00, 3500.00),
+(14, 17, 4, 1, 4000.00, 4000.00),
+(15, 18, 5, 5, 3500.00, 17500.00),
+(16, 19, 5, 2, 3500.00, 7000.00),
+(17, 20, 5, 1, 3500.00, 3500.00);
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `tbl_member`
+--
+
+CREATE TABLE `tbl_member` (
+  `id_member` int(11) NOT NULL,
+  `id_pelanggan` int(11) NOT NULL,
+  `kode_member` varchar(32) DEFAULT NULL,
+  `kode_rfid` char(64) DEFAULT NULL,
+  `no_hp` varchar(20) DEFAULT NULL,
+  `diskon_persen` decimal(5,2) NOT NULL DEFAULT 5.00,
+  `aktif` tinyint(1) NOT NULL DEFAULT 1,
+  `bergabung_pada` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `tbl_member`
+--
+
+INSERT INTO `tbl_member` (`id_member`, `id_pelanggan`, `kode_member`, `kode_rfid`, `no_hp`, `diskon_persen`, `aktif`, `bergabung_pada`) VALUES
+(1, 8, '300000000001', '1981717ae6abf3f29565eba6997b804a29a89f4067fbd9d230644a389189e3c3', '085746863781', 10.00, 1, '2026-11-23 03:03:18'),
+(2, 1, '300000000002', 'c598c262cbb54f55b9994bcdbb016b727c15decc17b10e3757822ab326a96837', '0812918232718', 6.00, 1, '2026-11-23 03:22:54');
 
 -- --------------------------------------------------------
 
@@ -180,7 +233,19 @@ INSERT INTO `tbl_pelanggan` (`id_pelanggan`, `nama_pelanggan`, `kota`) VALUES
 (4, 'Rina Wijaya', 'Ponorogo'),
 (5, 'Dewi', 'Ponorogo'),
 (6, 'Rina', 'Ponorogo'),
-(7, 'Administrator', '');
+(7, 'Administrator', ''),
+(8, 'faza', ''),
+(9, 'Pelanggan Umum', ''),
+(10, 'Pelanggan Umum', ''),
+(11, 'Pelanggan Umum', ''),
+(12, 'faza', ''),
+(13, 'faza', ''),
+(14, 'Pelanggan Umum', ''),
+(15, 'Pelanggan Umum', ''),
+(16, 'Pelanggan Umum', ''),
+(17, 'Pelanggan Umum', ''),
+(18, 'Pelanggan Umum', ''),
+(19, 'Pelanggan Umum', '');
 
 --
 -- Triggers `tbl_pelanggan`
@@ -203,6 +268,36 @@ DELIMITER ;
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `tbl_pengaturan`
+--
+
+CREATE TABLE `tbl_pengaturan` (
+  `kunci` varchar(60) NOT NULL,
+  `nilai` text DEFAULT NULL,
+  `diubah_pada` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `tbl_pengaturan`
+--
+
+INSERT INTO `tbl_pengaturan` (`kunci`, `nilai`, `diubah_pada`) VALUES
+('alamat_toko', 'Ponorogo, Jawa Timur', '2026-11-23 03:39:10'),
+('footer_struk', 'Terima kasih sudah berbelanja!', '2026-11-23 03:39:10'),
+('lebar_struk', '80', '2026-11-23 03:39:10'),
+('logo_toko', 'assets/uploads/toko/cc39f4c2b0c957ad.png', '2026-11-23 04:16:04'),
+('member_diskon_default', '5', '2026-11-23 03:49:21'),
+('metode_aktif', 'tunai,qris,debit', '2026-11-23 03:49:21'),
+('nama_toko', 'Toko Fassa', '2026-11-23 03:39:10'),
+('payment_timeout_hours', '24', '2026-11-23 03:49:21'),
+('qris_gambar', 'assets/uploads/toko/a1af8c460b443b67.jpg', '2026-11-23 03:52:21'),
+('stok_menipis', '5', '2026-11-23 03:49:21'),
+('struk_barcode', '1', '2026-11-23 04:07:06'),
+('telepon_toko', '', '2026-11-23 03:39:10');
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `tbl_produk`
 --
 
@@ -213,19 +308,24 @@ CREATE TABLE `tbl_produk` (
   `harga` decimal(12,2) NOT NULL DEFAULT 0.00,
   `stok` int(11) NOT NULL DEFAULT 0,
   `deskripsi` text DEFAULT NULL,
-  `dibuat_pada` timestamp NOT NULL DEFAULT current_timestamp()
+  `dibuat_pada` timestamp NOT NULL DEFAULT current_timestamp(),
+  `diskon` decimal(5,2) NOT NULL DEFAULT 0.00,
+  `gambar` varchar(500) DEFAULT NULL,
+  `terjual` int(11) NOT NULL DEFAULT 0,
+  `rating` decimal(2,1) NOT NULL DEFAULT 5.0,
+  `barcode` varchar(32) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
 -- Dumping data for table `tbl_produk`
 --
 
-INSERT INTO `tbl_produk` (`id_produk`, `nama_produk`, `kategori`, `harga`, `stok`, `deskripsi`, `dibuat_pada`) VALUES
-(1, 'Beras Premium 5 Kg', 'Sembako', 78000.00, 20, 'Beras premium kemasan 5 kilogram', '2026-11-11 00:53:48'),
-(2, 'Minyak Goreng 1 L', 'Sembako', 18000.00, 30, 'Minyak goreng kemasan 1 liter', '2026-11-11 00:53:48'),
-(3, 'Gula Pasir 1 Kg', 'Sembako', 17000.00, 25, 'Gula pasir kemasan 1 kilogram', '2026-11-11 00:53:48'),
-(4, 'Air Mineral 600 ml', 'Minuman', 4000.00, 47, 'Air mineral botol 600 ml', '2026-11-11 00:53:48'),
-(5, 'Mi Instan', 'Makanan', 3500.00, 60, 'Mi instan aneka rasa', '2026-11-11 00:53:48');
+INSERT INTO `tbl_produk` (`id_produk`, `nama_produk`, `kategori`, `harga`, `stok`, `deskripsi`, `dibuat_pada`, `diskon`, `gambar`, `terjual`, `rating`, `barcode`) VALUES
+(1, 'Beras Premium 5 Kg', 'Sembako', 78000.00, 20, 'Beras premium kemasan 5 kilogram', '2026-11-11 00:53:48', 0.00, 'assets/uploads/produk/3c8c779ca653dc8d.png', 0, 5.0, '200000000001'),
+(2, 'Minyak Goreng 1 L', 'Sembako', 18000.00, 30, 'Minyak goreng kemasan 1 liter', '2026-11-11 00:53:48', 0.00, 'assets/uploads/produk/e14dc4dcaf1f17b2.jpg', 0, 5.0, '200000000002'),
+(3, 'Gula Pasir 1 Kg', 'Sembako', 17000.00, 24, 'Gula pasir kemasan 1 kilogram', '2026-11-11 00:53:48', 0.00, 'assets/uploads/produk/80abe32791c0a0d0.jpg', 1, 5.0, '8992745000174'),
+(4, 'Air Mineral 600 ml', 'Minuman', 4000.00, 41, 'Air mineral botol 600 ml', '2026-11-11 00:53:48', 0.00, 'assets/uploads/produk/6ffa832ecdfba322.webp', 6, 5.0, '8996001600269'),
+(5, 'Mi Instan', 'Makanan', 3500.00, 43, 'Mi instan aneka rasa', '2026-11-11 00:53:48', 0.00, 'assets/uploads/produk/34c7b901ddfdf117.webp', 16, 5.0, '123456789012');
 
 -- --------------------------------------------------------
 
@@ -238,19 +338,43 @@ CREATE TABLE `tbl_transaksi` (
   `tanggal` date DEFAULT NULL,
   `id_pelanggan` int(11) DEFAULT NULL,
   `total_belanja` decimal(12,2) DEFAULT NULL,
-  `id_user` int(11) DEFAULT NULL
+  `id_user` int(11) DEFAULT NULL,
+  `status_pembayaran` enum('menunggu','dibayar','dibatalkan','kedaluwarsa') NOT NULL DEFAULT 'dibayar',
+  `metode_pembayaran` varchar(30) DEFAULT NULL,
+  `kode_invoice` varchar(30) DEFAULT NULL,
+  `batas_bayar` datetime DEFAULT NULL,
+  `dibayar_pada` datetime DEFAULT NULL,
+  `bukti_bayar` varchar(255) DEFAULT NULL,
+  `id_member` int(11) DEFAULT NULL,
+  `diskon_member` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `diskon_member_persen` decimal(5,2) NOT NULL DEFAULT 0.00
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
 -- Dumping data for table `tbl_transaksi`
 --
 
-INSERT INTO `tbl_transaksi` (`id_transaksi`, `tanggal`, `id_pelanggan`, `total_belanja`, `id_user`) VALUES
-(1, '2026-10-01', 1, 250000.00, NULL),
-(2, '2026-10-02', 2, 350000.00, NULL),
-(3, '2026-10-03', 1, 150000.00, NULL),
-(4, '2026-10-04', 3, 500000.00, NULL),
-(5, '2026-11-11', 7, 4000.00, 1);
+INSERT INTO `tbl_transaksi` (`id_transaksi`, `tanggal`, `id_pelanggan`, `total_belanja`, `id_user`, `status_pembayaran`, `metode_pembayaran`, `kode_invoice`, `batas_bayar`, `dibayar_pada`, `bukti_bayar`, `id_member`, `diskon_member`, `diskon_member_persen`) VALUES
+(1, '2026-10-01', 1, 250000.00, NULL, 'dibayar', NULL, NULL, NULL, NULL, NULL, NULL, 0.00, 0.00),
+(2, '2026-10-02', 2, 350000.00, NULL, 'dibayar', NULL, NULL, NULL, NULL, NULL, NULL, 0.00, 0.00),
+(3, '2026-10-03', 1, 150000.00, NULL, 'dibayar', NULL, NULL, NULL, NULL, NULL, NULL, 0.00, 0.00),
+(4, '2026-10-04', 3, 500000.00, NULL, 'dibayar', NULL, NULL, NULL, NULL, NULL, NULL, 0.00, 0.00),
+(5, '2026-11-11', 7, 4000.00, 1, 'dibayar', NULL, NULL, NULL, NULL, NULL, NULL, 0.00, 0.00),
+(6, '2026-11-23', 8, 3500.00, 1, 'dibayar', 'qris', 'POS261123091854', '2026-11-24 09:18:54', '2026-11-23 09:18:57', NULL, NULL, 0.00, 0.00),
+(7, '2026-11-23', 9, 7000.00, 1, 'dibayar', 'qris', 'POS261123093558', '2026-11-24 09:35:58', '2026-11-23 09:36:03', NULL, NULL, 0.00, 0.00),
+(8, '2026-11-23', 10, 12000.00, 1, 'dibayar', 'qris', 'POS261123093751', '2026-11-24 09:37:51', '2026-11-23 09:37:53', NULL, NULL, 0.00, 0.00),
+(9, '2026-11-23', 11, 21000.00, 1, 'dibayar', 'debit', 'POS261123093859', NULL, '2026-11-23 09:38:59', NULL, NULL, 0.00, 0.00),
+(10, '2026-11-23', 12, 3500.00, 1, 'dibayar', 'tunai', 'POS261123100431', NULL, '2026-11-23 10:04:31', NULL, NULL, 0.00, 0.00),
+(11, '2026-11-23', 13, 3500.00, 2, 'dibayar', 'debit', 'POS261123100530', NULL, '2026-11-23 10:05:30', NULL, NULL, 0.00, 0.00),
+(12, '2026-11-23', 8, 3150.00, 2, 'dibayar', 'qris', 'POS261123100942', '2026-11-24 10:09:42', '2026-11-23 10:09:47', NULL, 1, 350.00, 10.00),
+(13, '2026-11-23', 1, 3760.00, 1, 'dibayar', 'qris', 'POS261123102308', '2026-11-24 10:23:08', '2026-11-23 10:24:42', NULL, 2, 240.00, 6.00),
+(14, '2026-11-23', 14, 3500.00, 1, 'menunggu', 'qris', 'POS261123104943', '2026-11-24 10:49:43', NULL, NULL, NULL, 0.00, 0.00),
+(15, '2026-11-23', 15, 3500.00, 1, 'dibayar', 'qris', 'POS261123105237', '2026-11-24 10:52:37', '2026-11-23 10:53:27', NULL, NULL, 0.00, 0.00),
+(16, '2026-11-23', 16, 3500.00, 1, 'dibayar', 'debit', 'POS261123105424', NULL, '2026-11-23 10:54:24', NULL, NULL, 0.00, 0.00),
+(17, '2026-11-23', 1, 3760.00, 1, 'dibayar', 'qris', 'POS261123105746', '2026-11-24 10:57:46', '2026-11-23 10:58:04', NULL, 2, 240.00, 6.00),
+(18, '2026-11-23', 17, 17500.00, 1, 'dibayar', 'qris', 'POS261123110124', '2026-11-24 11:01:24', '2026-11-23 11:01:28', NULL, NULL, 0.00, 0.00),
+(19, '2026-11-23', 18, 7000.00, 1, 'dibayar', 'qris', 'POS261123110416', '2026-11-24 11:04:16', '2026-11-23 11:04:19', NULL, NULL, 0.00, 0.00),
+(20, '2026-11-23', 19, 3500.00, 2, 'dibayar', 'qris', 'POS261123111649', '2026-11-24 11:16:49', '2026-11-23 11:16:52', NULL, NULL, 0.00, 0.00);
 
 --
 -- Triggers `tbl_transaksi`
@@ -276,17 +400,21 @@ CREATE TABLE `tbl_user` (
   `nama` varchar(100) NOT NULL,
   `username` varchar(50) NOT NULL,
   `password` varchar(255) NOT NULL,
-  `role` enum('admin','user') NOT NULL DEFAULT 'user',
-  `dibuat_pada` timestamp NOT NULL DEFAULT current_timestamp()
+  `role` enum('admin','kasir','user') NOT NULL DEFAULT 'kasir',
+  `dibuat_pada` timestamp NOT NULL DEFAULT current_timestamp(),
+  `kode_kartu` char(64) DEFAULT NULL,
+  `kode_rfid` char(64) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
 -- Dumping data for table `tbl_user`
 --
 
-INSERT INTO `tbl_user` (`id_user`, `nama`, `username`, `password`, `role`, `dibuat_pada`) VALUES
-(1, 'Administrator', 'admin', '$2y$12$6pi2c/p8Z5C0rHrASciCUOAER4H5tqnAUdk1b8KkpDMnKZokwtJ7K', 'admin', '2026-11-11 00:53:48'),
-(2, 'Kasir', 'user', '$2y$12$VkZjM19HO4WA2qqRnOqj0eWI9MHJsZtyVGDrVNSorDNbFDJGDWnf2', 'user', '2026-11-11 00:53:48');
+INSERT INTO `tbl_user` (`id_user`, `nama`, `username`, `password`, `role`, `dibuat_pada`, `kode_kartu`, `kode_rfid`) VALUES
+(1, 'Administrator', 'admin', '$2y$12$6pi2c/p8Z5C0rHrASciCUOAER4H5tqnAUdk1b8KkpDMnKZokwtJ7K', 'admin', '2026-11-11 00:53:48', NULL, 'c598c262cbb54f55b9994bcdbb016b727c15decc17b10e3757822ab326a96837'),
+(2, 'Kasir', 'user', '$2y$12$VkZjM19HO4WA2qqRnOqj0eWI9MHJsZtyVGDrVNSorDNbFDJGDWnf2', 'kasir', '2026-11-11 00:53:48', NULL, '1981717ae6abf3f29565eba6997b804a29a89f4067fbd9d230644a389189e3c3'),
+(3, 'Administrator Toko', 'adminbaru', '$2y$12$8Lqtb6dlIr237fbCaHvVaOKg2Ondu2aguoDuRoLso5kA3ogAAZR5u', 'admin', '2026-11-23 01:45:31', NULL, NULL),
+(4, 'Petugas Kasir', 'kasir', '$2y$12$0Ck2smAB/jpkvL.OWgZcvehPqcWFTWgbAOs23oUFxwhKUrS/EKJji', 'kasir', '2026-11-23 01:45:31', NULL, NULL);
 
 -- --------------------------------------------------------
 
@@ -327,6 +455,129 @@ CREATE TABLE `view_transaksi_pelanggan` (
 ,`total_belanja` decimal(12,2)
 );
 
+--
+-- Indexes for dumped tables
+--
+
+--
+-- Indexes for table `log_pelanggan`
+--
+ALTER TABLE `log_pelanggan`
+  ADD PRIMARY KEY (`id_log`);
+
+--
+-- Indexes for table `log_perubahan_pelanggan`
+--
+ALTER TABLE `log_perubahan_pelanggan`
+  ADD PRIMARY KEY (`id_log`);
+
+--
+-- Indexes for table `tbl_detail_transaksi`
+--
+ALTER TABLE `tbl_detail_transaksi`
+  ADD PRIMARY KEY (`id_detail`),
+  ADD KEY `fk_detail_produk` (`id_produk`),
+  ADD KEY `idx_detail_transaksi` (`id_transaksi`);
+
+--
+-- Indexes for table `tbl_member`
+--
+ALTER TABLE `tbl_member`
+  ADD PRIMARY KEY (`id_member`),
+  ADD UNIQUE KEY `uk_member_pelanggan` (`id_pelanggan`),
+  ADD UNIQUE KEY `uk_member_kode` (`kode_member`),
+  ADD UNIQUE KEY `uk_member_rfid` (`kode_rfid`);
+
+--
+-- Indexes for table `tbl_pelanggan`
+--
+ALTER TABLE `tbl_pelanggan`
+  ADD PRIMARY KEY (`id_pelanggan`);
+
+--
+-- Indexes for table `tbl_pengaturan`
+--
+ALTER TABLE `tbl_pengaturan`
+  ADD PRIMARY KEY (`kunci`);
+
+--
+-- Indexes for table `tbl_produk`
+--
+ALTER TABLE `tbl_produk`
+  ADD PRIMARY KEY (`id_produk`),
+  ADD UNIQUE KEY `uk_produk_barcode` (`barcode`),
+  ADD KEY `idx_produk_nama` (`nama_produk`),
+  ADD KEY `idx_produk_kategori` (`kategori`);
+
+--
+-- Indexes for table `tbl_transaksi`
+--
+ALTER TABLE `tbl_transaksi`
+  ADD PRIMARY KEY (`id_transaksi`),
+  ADD KEY `id_pelanggan` (`id_pelanggan`),
+  ADD KEY `idx_transaksi_user` (`id_user`);
+
+--
+-- Indexes for table `tbl_user`
+--
+ALTER TABLE `tbl_user`
+  ADD PRIMARY KEY (`id_user`),
+  ADD UNIQUE KEY `username` (`username`),
+  ADD UNIQUE KEY `uk_user_kartu` (`kode_kartu`),
+  ADD UNIQUE KEY `uk_user_rfid` (`kode_rfid`);
+
+--
+-- AUTO_INCREMENT for dumped tables
+--
+
+--
+-- AUTO_INCREMENT for table `log_pelanggan`
+--
+ALTER TABLE `log_pelanggan`
+  MODIFY `id_log` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=15;
+
+--
+-- AUTO_INCREMENT for table `log_perubahan_pelanggan`
+--
+ALTER TABLE `log_perubahan_pelanggan`
+  MODIFY `id_log` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+
+--
+-- AUTO_INCREMENT for table `tbl_detail_transaksi`
+--
+ALTER TABLE `tbl_detail_transaksi`
+  MODIFY `id_detail` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=18;
+
+--
+-- AUTO_INCREMENT for table `tbl_member`
+--
+ALTER TABLE `tbl_member`
+  MODIFY `id_member` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
+
+--
+-- AUTO_INCREMENT for table `tbl_pelanggan`
+--
+ALTER TABLE `tbl_pelanggan`
+  MODIFY `id_pelanggan` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=20;
+
+--
+-- AUTO_INCREMENT for table `tbl_produk`
+--
+ALTER TABLE `tbl_produk`
+  MODIFY `id_produk` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
+
+--
+-- AUTO_INCREMENT for table `tbl_transaksi`
+--
+ALTER TABLE `tbl_transaksi`
+  MODIFY `id_transaksi` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=21;
+
+--
+-- AUTO_INCREMENT for table `tbl_user`
+--
+ALTER TABLE `tbl_user`
+  MODIFY `id_user` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
+
 -- --------------------------------------------------------
 
 --
@@ -355,105 +606,6 @@ DROP TABLE IF EXISTS `view_transaksi_pelanggan`;
 CREATE ALGORITHM=UNDEFINED DEFINER=`root`@`localhost` SQL SECURITY DEFINER VIEW `view_transaksi_pelanggan`  AS SELECT `t`.`id_transaksi` AS `id_transaksi`, `t`.`tanggal` AS `tanggal`, `p`.`nama_pelanggan` AS `nama_pelanggan`, `p`.`kota` AS `kota`, `t`.`total_belanja` AS `total_belanja` FROM (`tbl_transaksi` `t` join `tbl_pelanggan` `p` on(`t`.`id_pelanggan` = `p`.`id_pelanggan`)) ;
 
 --
--- Indexes for dumped tables
---
-
---
--- Indexes for table `log_pelanggan`
---
-ALTER TABLE `log_pelanggan`
-  ADD PRIMARY KEY (`id_log`);
-
---
--- Indexes for table `log_perubahan_pelanggan`
---
-ALTER TABLE `log_perubahan_pelanggan`
-  ADD PRIMARY KEY (`id_log`);
-
---
--- Indexes for table `tbl_detail_transaksi`
---
-ALTER TABLE `tbl_detail_transaksi`
-  ADD PRIMARY KEY (`id_detail`),
-  ADD KEY `fk_detail_produk` (`id_produk`),
-  ADD KEY `idx_detail_transaksi` (`id_transaksi`);
-
---
--- Indexes for table `tbl_pelanggan`
---
-ALTER TABLE `tbl_pelanggan`
-  ADD PRIMARY KEY (`id_pelanggan`);
-
---
--- Indexes for table `tbl_produk`
---
-ALTER TABLE `tbl_produk`
-  ADD PRIMARY KEY (`id_produk`),
-  ADD KEY `idx_produk_nama` (`nama_produk`),
-  ADD KEY `idx_produk_kategori` (`kategori`);
-
---
--- Indexes for table `tbl_transaksi`
---
-ALTER TABLE `tbl_transaksi`
-  ADD PRIMARY KEY (`id_transaksi`),
-  ADD KEY `id_pelanggan` (`id_pelanggan`),
-  ADD KEY `idx_transaksi_user` (`id_user`);
-
---
--- Indexes for table `tbl_user`
---
-ALTER TABLE `tbl_user`
-  ADD PRIMARY KEY (`id_user`),
-  ADD UNIQUE KEY `username` (`username`);
-
---
--- AUTO_INCREMENT for dumped tables
---
-
---
--- AUTO_INCREMENT for table `log_pelanggan`
---
-ALTER TABLE `log_pelanggan`
-  MODIFY `id_log` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
-
---
--- AUTO_INCREMENT for table `log_perubahan_pelanggan`
---
-ALTER TABLE `log_perubahan_pelanggan`
-  MODIFY `id_log` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
-
---
--- AUTO_INCREMENT for table `tbl_detail_transaksi`
---
-ALTER TABLE `tbl_detail_transaksi`
-  MODIFY `id_detail` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
-
---
--- AUTO_INCREMENT for table `tbl_pelanggan`
---
-ALTER TABLE `tbl_pelanggan`
-  MODIFY `id_pelanggan` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=8;
-
---
--- AUTO_INCREMENT for table `tbl_produk`
---
-ALTER TABLE `tbl_produk`
-  MODIFY `id_produk` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
-
---
--- AUTO_INCREMENT for table `tbl_transaksi`
---
-ALTER TABLE `tbl_transaksi`
-  MODIFY `id_transaksi` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
-
---
--- AUTO_INCREMENT for table `tbl_user`
---
-ALTER TABLE `tbl_user`
-  MODIFY `id_user` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
-
---
 -- Constraints for dumped tables
 --
 
@@ -463,6 +615,12 @@ ALTER TABLE `tbl_user`
 ALTER TABLE `tbl_detail_transaksi`
   ADD CONSTRAINT `fk_detail_produk` FOREIGN KEY (`id_produk`) REFERENCES `tbl_produk` (`id_produk`),
   ADD CONSTRAINT `fk_detail_transaksi` FOREIGN KEY (`id_transaksi`) REFERENCES `tbl_transaksi` (`id_transaksi`) ON DELETE CASCADE;
+
+--
+-- Constraints for table `tbl_member`
+--
+ALTER TABLE `tbl_member`
+  ADD CONSTRAINT `fk_member_pelanggan` FOREIGN KEY (`id_pelanggan`) REFERENCES `tbl_pelanggan` (`id_pelanggan`) ON DELETE CASCADE;
 
 --
 -- Constraints for table `tbl_transaksi`

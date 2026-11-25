@@ -1,0 +1,40 @@
+PENAMBAHAN FITUR TOKO ONLINE - TOKO FASSA
+==========================================
+
+1. Ekstrak ZIP aplikasi ke folder htdocs, misalnya:
+   C:\xampp\htdocs\tokoku_native
+
+2. Jalankan Apache dan MySQL dari XAMPP.
+
+3. Pastikan database db_tokoku2 sudah diimpor menggunakan file SQL
+   db_tokoku2 (1).sql yang disertakan pengguna.
+   Pengaturan koneksi database tetap berada di config.php.
+
+4. Buka panel kasir/admin seperti biasa melalui:
+   http://localhost/tokoku_native/index.php
+
+5. Buka toko online melalui:
+   http://localhost/tokoku_native/store.php
+
+6. Pelanggan dapat membuat akun sendiri melalui tombol Masuk / Daftar.
+   Akun pelanggan disimpan dengan role 'user' dan dipisahkan dari akun Admin/Kasir.
+   Tabel relasi akun pelanggan dibuat otomatis saat store.php pertama kali dibuka.
+
+7. Untuk mengaktifkan pembayaran QRIS:
+   - Login sebagai Admin.
+   - Buka menu Pengaturan.
+   - Unggah gambar QRIS resmi milik toko pada pengaturan QRIS.
+   - Simpan pengaturan.
+   Pelanggan memilih produk, checkout, scan QRIS, lalu mengunggah bukti pembayaran.
+   Admin memeriksa bukti dan mengonfirmasi transaksi dari menu Data Transaksi.
+
+CATATAN PENTING PEMBAYARAN
+-------------------------
+Versi ini memakai QRIS statis milik toko dengan verifikasi manual melalui bukti
+pembayaran. Nominal tidak otomatis tertanam pada QR dan sistem tidak menerima
+notifikasi pembayaran otomatis dari bank/e-wallet. Untuk verifikasi otomatis,
+perlu integrasi payment gateway (misalnya Midtrans atau Xendit), akun merchant
+aktif, serta Server Key/API credentials milik toko.
+
+Data produk, pelanggan, dan transaksi pada database lama tidak dihapus oleh
+penambahan toko online ini. Tetap lakukan backup database sebelum update.

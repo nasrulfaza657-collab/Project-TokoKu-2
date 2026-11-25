@@ -99,7 +99,6 @@ $tipeRole = (string)$pdo->query("SELECT column_type FROM information_schema.colu
 if (!str_contains($tipeRole, "'kasir'")) {
     $pdo->exec("ALTER TABLE tbl_user MODIFY role ENUM('admin','kasir','user') NOT NULL DEFAULT 'kasir'");
 }
-$pdo->exec("UPDATE tbl_user SET role='kasir' WHERE role='user'");
 $hasKartu = $pdo->query("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='tbl_user' AND column_name='kode_kartu'")->fetchColumn();
 if (!$hasKartu) $pdo->exec("ALTER TABLE tbl_user ADD COLUMN kode_kartu char(64) DEFAULT NULL, ADD UNIQUE KEY uk_user_kartu (kode_kartu)");
 $hasRfid = $pdo->query("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='tbl_user' AND column_name='kode_rfid'")->fetchColumn();
@@ -288,7 +287,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'login
             'nama' => $u['nama'],
             'role' => $u['role']
         ];
-        header('Location: index.php');
+        header('Location: ' . ($u['role'] === 'user' ? 'store.php' : 'index.php'));
         exit;
     }
     usleep(500000);
@@ -468,7 +467,7 @@ body.lg{min-height:100vh;display:grid;place-items:center;padding:24px;font-famil
         <small>Langsung masuk sesuai role, tanpa mengetik.</small>
       </div>
     </form>
-    <div class="foot">© <?= date('Y') ?> <?= e($NAMA_TOKO) ?></div>
+    <div class="foot">© <?= date('Y') ?> <?= e($NAMA_TOKO) ?><br><a href="store.php" style="color:#a99aff;text-decoration:none;font-weight:700">Belanja sebagai pelanggan →</a></div>
   </section>
 </div>
 <script>
@@ -500,7 +499,8 @@ if (!$akunSesi) {            // akun sudah dihapus admin
     exit;
 }
 $_SESSION['auth']['nama'] = $akunSesi['nama'];
-$_SESSION['auth']['role'] = $akunSesi['role'] === 'admin' ? 'admin' : 'kasir';
+$_SESSION['auth']['role'] = $akunSesi['role'];
+if ($akunSesi['role'] === 'user') { header('Location: store.php'); exit; }
 
 $role = $_SESSION['auth']['role'];
 
@@ -632,7 +632,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (!$metode) throw new RuntimeException('Aktifkan minimal satu metode pembayaran.');
                 if ($diskon < 0 || $diskon > 50) throw new RuntimeException('Diskon member bawaan harus antara 0 dan 50 persen.');
                 if ($stokMn < 0 || $stokMn > 1000) throw new RuntimeException('Batas stok menipis harus antara 0 dan 1000.');
-                $pairs = ['metode_aktif' => implode(',', $metode), 'member_diskon_default' => $diskon, 'stok_menipis' => $stokMn];
+                $namaBank = trim((string)($_POST['nama_bank'] ?? ''));
+                $nomorRek = trim((string)($_POST['nomor_rekening'] ?? ''));
+                $pemilikRek = trim((string)($_POST['nama_pemilik_rekening'] ?? ''));
+                $catatanTf = trim((string)($_POST['catatan_transfer'] ?? ''));
+                if (mb_strlen($namaBank)>60 || mb_strlen($nomorRek)>40 || mb_strlen($pemilikRek)>100 || mb_strlen($catatanTf)>300) throw new RuntimeException('Informasi rekening bank terlalu panjang.');
+                $pairs = ['metode_aktif' => implode(',', $metode), 'member_diskon_default' => $diskon, 'stok_menipis' => $stokMn, 'nama_bank'=>$namaBank, 'nomor_rekening'=>$nomorRek, 'nama_pemilik_rekening'=>$pemilikRek, 'catatan_transfer'=>$catatanTf];
                 $qrisLama = setting('qris_gambar');
                 $qrisBaru = uploadImage('qris', 'toko');
                 if ($qrisBaru !== null) {
@@ -1266,6 +1271,7 @@ function rows(PDO $pdo, string $sql): array {
   <nav>
     <a class="<?= $page==='dashboard'?'active':'' ?>" href="?page=dashboard"><i>⌂</i>Dashboard</a>
     <a class="<?= $page==='produk'?'active':'' ?>" href="?page=produk"><i>▦</i>Katalog Produk</a>
+    <a href="store.php" target="_blank" rel="noopener"><i>🛍</i>Lihat Toko Online</a>
     <a class="<?= $page==='keranjang'?'active':'' ?>" href="?page=keranjang"><i>🛒</i>Keranjang <span class="nav-count"><?= array_sum($_SESSION['cart'] ?? []) ?></span></a>
     <?php if ($role === 'admin'): ?>
     <a class="<?= $page==='pelanggan'?'active':'' ?>" href="?page=pelanggan"><i>♙</i>Pelanggan</a>
@@ -2021,6 +2027,8 @@ $qrisAda  = $qrisFile !== '' && is_file(__DIR__ . '/' . $qrisFile);
       </div>
     </div>
     <div class="panel">
+      <div class="panel-head"><div><h3>Rekening transfer bank untuk toko online</h3><p>Informasi ini ditampilkan kepada pelanggan saat memilih transfer bank.</p></div></div>
+      <div class="set-form"><label>Nama bank<input name="nama_bank" maxlength="60" placeholder="Contoh: BRI / BCA / BNI" value="<?= e(setting('nama_bank')) ?>"></label><label>Nomor rekening<input name="nomor_rekening" maxlength="40" inputmode="numeric" value="<?= e(setting('nomor_rekening')) ?>"></label><label>Nama pemilik rekening<input name="nama_pemilik_rekening" maxlength="100" value="<?= e(setting('nama_pemilik_rekening')) ?>"></label><label>Catatan transfer (opsional)<textarea name="catatan_transfer" rows="2" maxlength="300" placeholder="Contoh: Cantumkan nomor invoice pada berita transfer."><?= e(setting('catatan_transfer')) ?></textarea></label><p class="set-note">Isi rekening ini agar pelanggan dapat memilih Transfer Bank ketika checkout toko online.</p></div>
       <div class="panel-head"><div><h3>Aturan transaksi</h3><p>Berlaku mulai transaksi berikutnya.</p></div></div>
       <div class="set-form">
         <label>Diskon member bawaan (%)<input type="number" name="member_diskon_default" min="0" max="50" step="0.5" value="<?= e((float)$MEMBER_DISKON_DEFAULT) ?>"></label>
@@ -2234,7 +2242,7 @@ $meId = (int)$_SESSION['auth']['id'];
           <td><?= e($r['kode_invoice'] ?: '-') ?></td>
           <td><?= e($r['tanggal']) ?></td>
           <td><?= e($r['nama_pelanggan']) ?> <small style="color:#8999b8"><?= e($r['kota']) ?></small></td>
-          <td><?= e($r['nama_kasir'] ?: '-') ?></td>
+          <td><?= e($r['nama_kasir'] ?: ($r['metode_pembayaran']==='qris' && str_starts_with((string)$r['kode_invoice'],'WEB') ? 'Online' : '-')) ?></td>
           <td><?= e($PAYMENT_METHODS[$r['metode_pembayaran'] ?? '']['label'] ?? 'Manual') ?></td>
           <td><?= rupiah($r['total_belanja']) ?></td>
           <td><?= badge((string)$r['status_pembayaran']) ?></td>

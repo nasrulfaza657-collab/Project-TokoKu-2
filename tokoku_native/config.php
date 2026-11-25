@@ -39,6 +39,11 @@ const SETTING_DEFAULT = [
     'logo_toko'             => '',
     'struk_barcode'         => '1',
     'umum_dirapikan'        => '0',
+    // Rekening transfer bank (toko online)
+    'nama_bank'             => '',
+    'nomor_rekening'        => '',
+    'nama_pemilik_rekening' => '',
+    'catatan_transfer'      => '',
 ];
 
 function pengaturan_muat(PDO $pdo, bool $refresh = false): array {

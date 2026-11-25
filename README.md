@@ -22,6 +22,8 @@ Tabel `tbl_pengaturan`, `tbl_member`, `tbl_detail_transaksi`, dan kolom tambahan
 tokoku_native/
 ├── index.php            # halaman utama, login, semua menu & aksi form
 ├── config.php           # koneksi DB, helper pengaturan, metode pembayaran
+├── laporan_view.php     # tampilan menu Laporan (tab, grafik, dokumen PDF)
+├── laporan_lib.php      # query laporan + pembuat file Excel (.xlsx)
 ├── struk.php            # cetak struk thermal (+ barcode invoice)
 ├── kartu_member.php     # cetak kartu member
 ├── barcode.php          # label barcode produk & kartu login staf
@@ -42,6 +44,8 @@ Folder `produk/`, `toko/`, dan `bukti/` dibuat otomatis saat file pertama diungg
 |---|---|
 | `index.php` | Halaman utama, login, semua menu, dan seluruh aksi form |
 | `config.php` | Koneksi database, `setting()` / `pengaturan_simpan()`, metode pembayaran |
+| `laporan_view.php` | Halaman Laporan: filter periode, tab, grafik, dokumen PDF |
+| `laporan_lib.php` | `laporanPeriode()`, `laporanData()`, `laporanXlsx()`, `lapTabel()` |
 | `struk.php` | Struk 58/80 mm: logo, identitas toko, item, diskon member, barcode invoice |
 | `kartu_member.php` | Kartu member berisi barcode kode member |
 | `barcode.php` | Label barcode produk dan kartu login staf (admin) |
@@ -113,7 +117,7 @@ Pratinjau struk di sebelah kanan berubah langsung saat Anda mengetik atau memili
 | Metode pembayaran | Tunai / QRIS / Kartu Debit. Hanya yang dicentang tampil di checkout; minimal satu harus aktif. |
 | Gambar QRIS | Menggantikan `assets/qris.png`. Jika kosong dipakai `assets/qris.png` atau QR contoh (demo). |
 | Diskon member bawaan | Nilai awal untuk member baru, 0–50%. Member yang sudah ada tidak berubah. |
-| Batas waktu bayar QRIS | 1–168 jam. Pesanan QRIS yang lewat batas otomatis kedaluwarsa dan stok dikembalikan. |
+| Batas waktu bayar QRIS | Tetap 5 menit. Pesanan QRIS yang lewat batas otomatis kedaluwarsa dan stok dikembalikan. |
 | Peringatan stok menipis | Produk dengan stok ≤ angka ini diberi tanda di katalog, ada filter **Stok menipis**, dan peringatan di dashboard. Isi 0 untuk mematikan. |
 
 ### Akun Staf (admin)
@@ -124,6 +128,20 @@ Pratinjau struk di sebelah kanan berubah langsung saat Anda mengetik atau memili
 - Kartu login barcode/RFID tetap diatur di **Cetak Barcode > Kartu Login Staf**.
 
 > Pengaturan disimpan di tabel `tbl_pengaturan`. Nilai `$PAYMENT_TIMEOUT_HOURS` dan `$MEMBER_DISKON_DEFAULT` di `config.php` kini dibaca dari tabel ini, jadi tidak perlu diedit manual.
+
+## Laporan
+Menu **Laporan** (admin & kasir) menampilkan analisis penjualan dalam beberapa **tab** (Ringkasan, Penjualan, Produk, Pelanggan, Kasir, Transaksi) tanpa harus menggulir panjang ke bawah. Tab Kasir hanya terlihat oleh admin.
+
+- **Filter periode:** Hari ini, 7 hari, 30 hari, Bulan ini, Tahun ini, Semua, atau rentang tanggal sendiri. Semua angka hanya menghitung transaksi **lunas** (pesanan menunggu, dibatalkan, kedaluwarsa, dan data uji tidak ikut).
+- **Ringkasan:** omzet, jumlah transaksi, rata-rata per transaksi, item terjual (dengan pembanding persen terhadap periode sebelumnya), grafik omzet dan transaksi, porsi metode pembayaran, produk terlaris, dan pelanggan teratas.
+- **Penjualan:** tabel per hari dan per metode bayar, lengkap dengan baris total.
+- **Produk:** penjualan per produk dan kategori, serta daftar stok menipis.
+- **Pelanggan:** pelanggan teratas dan rekap per kota. **Kasir:** kinerja tiap akun. **Transaksi:** daftar transaksi lunas dengan tautan ke detail.
+- Tabel Produk, Pelanggan, dan Transaksi punya kotak pencarian.
+
+**Unduh laporan (tanpa dialog cetak browser):**
+- **PDF:** dibuat langsung menjadi file `laporan-<toko>-<dari>_<sampai>.pdf` (A4, kop berisi logo dan identitas toko, grafik, dan semua tabel). Memakai pustaka html2pdf dari CDN, jadi perlu internet.
+- **Excel (.xlsx):** file asli dengan beberapa sheet (Ringkasan, Penjualan Harian, Produk, Pelanggan, Kasir, Transaksi), format rupiah, dan baris total. Dibuat di server dan butuh ekstensi PHP `zip` (aktif bawaan XAMPP).
 
 ## Kasir & transaksi
 - **Katalog** bergaya marketplace: kartu produk, foto, diskon, rating, kategori, pencarian, dan pengurutan.
@@ -150,13 +168,36 @@ Pratinjau struk di sebelah kanan berubah langsung saat Anda mengetik atau memili
 - Function: `HitungDiskon`, `HitungPajak`, `HitungTotal`, `KategoriBelanja`, `KonversiNilai`
 - Trigger dan tabel log, uji COMMIT / ROLLBACK, dan EXPLAIN query
 
+## Riwayat perbaikan bug
+- **Struk bisa dibuka tanpa login.** `struk.php` kini wajib login.
+- **Setiap penjualan umum membuat pelanggan baru.** Sekarang memakai satu baris "Pelanggan Umum". Duplikat lama digabung otomatis satu kali (transaksi tetap utuh, member tidak disentuh).
+- **Uji COMMIT menambah pendapatan palsu.** Data uji kini berstatus *dibatalkan* sehingga tidak masuk dashboard maupun laporan.
+- **Dashboard salah hitung.** Total transaksi dan grafik kini hanya menghitung transaksi lunas; jumlah kota tidak lagi menghitung kota kosong.
+- **Kolom "Jumlah Transaksi" tampil sebagai rupiah** di halaman View. Sudah diperbaiki.
+- **Nomor invoice bisa kembar** jika dua transaksi terjadi dalam detik yang sama. Format baru: `POS` + tanggal + ID transaksi (contoh `POS26112300012`).
+- **Transaksi manual** kini khusus admin, divalidasi (tanggal, pelanggan), dan mencatat akun pembuatnya.
+- **Login password salah** kini diberi jeda singkat untuk menyulitkan tebak password.
+- **`ALTER TABLE` berjalan di setiap halaman** (memperlambat). Sekarang hanya dijalankan bila perlu.
+- Inisial avatar mendukung nama multi-byte, dan nama toko dipakai konsisten di sidebar dan katalog.
+
 ## Catatan keamanan
 - Gunakan hanya di localhost atau jaringan toko yang tepercaya.
 - Form Pengaturan memakai token CSRF. Form lain dan login belum; tambahkan CSRF, pembatasan percobaan login, HTTPS, dan pengamanan `config.php` sebelum dipublikasikan.
 - Folder `assets/uploads/` memblokir eksekusi file PHP lewat `.htaccess`.
 - Konfirmasi pembayaran masih manual (belum terhubung Midtrans/Xendit). QRIS bawaan adalah demo.
-- Chart.js dan Google Fonts dimuat dari CDN, jadi perlu internet saat halaman dibuka.
+- Chart.js, html2pdf, dan Google Fonts dimuat dari CDN, jadi perlu internet saat halaman dibuka.
+## Catatan perbaikan (25 November 2026)
+- Filter laporan memakai batas akhir eksklusif (`< tanggal berikutnya`) agar transaksi bertipe `DATETIME` pada hari terakhir tidak terlewat.
+- Periode kustom memvalidasi tanggal kalender secara ketat; tanggal tidak valid kembali ke periode 30 hari.
+- Periode semua waktu mengambil tanggal minimum dengan `DATE()` agar aman untuk kolom `DATETIME`.
+- Teks deskripsi halaman produk diperbaiki agar nama toko tampil, bukan kode PHP mentah.
+
+Catatan: seluruh file PHP sudah lolos `php -l`. Pengujian integrasi laporan tetap perlu dilakukan pada database `db_tokoku2` milik Anda karena dump SQL tidak disertakan dalam arsip ini.
 
 
-menggunakan claude ai
-email:rangersr646@gmail.com
+## Perbaikan laporan per kasir
+
+- Transaksi POS baru dan transaksi manual dicatat dengan `tbl_transaksi.id_user` dari sesi akun yang sedang login.
+- Laporan kasir difilter berdasarkan `id_user` sesi, sedangkan admin dapat melihat semua atau memilih kasir.
+- Untuk instalasi yang hanya memiliki satu akun kasir, transaksi lunas lama yang `id_user`-nya kosong akan dihubungkan ke satu-satunya akun kasir tersebut.
+- Jika terdapat beberapa akun kasir, transaksi lama tanpa `id_user` tidak dibagikan otomatis karena pemiliknya tidak dapat diketahui dengan aman. Admin perlu menentukan pemilik transaksi tersebut.

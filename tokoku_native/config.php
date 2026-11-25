@@ -38,6 +38,7 @@ const SETTING_DEFAULT = [
     'qris_gambar'           => '',
     'logo_toko'             => '',
     'struk_barcode'         => '1',
+    'umum_dirapikan'        => '0',
 ];
 
 function pengaturan_muat(PDO $pdo, bool $refresh = false): array {

@@ -1,6 +1,11 @@
 <?php
 declare(strict_types=1);
+session_start();
 require __DIR__ . '/config.php';
+if (empty($_SESSION['auth'])) {
+    http_response_code(403);
+    exit('Silakan login terlebih dahulu.');
+}
 
 function e($v): string { return htmlspecialchars((string)($v ?? ''), ENT_QUOTES, 'UTF-8'); }
 function rp($v): string { return number_format((float)$v, 0, ',', '.'); }

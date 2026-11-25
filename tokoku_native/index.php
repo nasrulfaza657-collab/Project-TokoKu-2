@@ -95,7 +95,10 @@ $_SESSION['csrf'] ??= bin2hex(random_bytes(16));
 })($pdo);
 
 // Akun staf
-$pdo->exec("ALTER TABLE tbl_user MODIFY role ENUM('admin','kasir','user') NOT NULL DEFAULT 'kasir'");
+$tipeRole = (string)$pdo->query("SELECT column_type FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='tbl_user' AND column_name='role'")->fetchColumn();
+if (!str_contains($tipeRole, "'kasir'")) {
+    $pdo->exec("ALTER TABLE tbl_user MODIFY role ENUM('admin','kasir','user') NOT NULL DEFAULT 'kasir'");
+}
 $pdo->exec("UPDATE tbl_user SET role='kasir' WHERE role='user'");
 $hasKartu = $pdo->query("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='tbl_user' AND column_name='kode_kartu'")->fetchColumn();
 if (!$hasKartu) $pdo->exec("ALTER TABLE tbl_user ADD COLUMN kode_kartu char(64) DEFAULT NULL, ADD UNIQUE KEY uk_user_kartu (kode_kartu)");
@@ -214,6 +217,27 @@ function expireOrders(PDO $pdo): void {
 }
 expireOrders($pdo);
 
+// Perapian satu kali: versi lama membuat baris "Pelanggan Umum" baru di setiap penjualan.
+// Gabungkan semuanya ke satu baris (transaksi tetap utuh, member tidak disentuh).
+if (setting('umum_dirapikan') !== '1') {
+    $umum = "p.nama_pelanggan='Pelanggan Umum' AND (p.kota IS NULL OR p.kota='')";
+    $bukanMember = "NOT EXISTS (SELECT 1 FROM tbl_member m WHERE m.id_pelanggan=p.id_pelanggan)";
+    $keepId = (int)$pdo->query("SELECT MIN(p.id_pelanggan) FROM tbl_pelanggan p WHERE $umum AND $bukanMember")->fetchColumn();
+    if ($keepId > 0) {
+        $pdo->beginTransaction();
+        try {
+            $pdo->prepare("UPDATE tbl_transaksi t JOIN tbl_pelanggan p ON p.id_pelanggan=t.id_pelanggan SET t.id_pelanggan=? WHERE $umum AND p.id_pelanggan<>? AND $bukanMember")
+                ->execute([$keepId, $keepId]);
+            $pdo->prepare("DELETE p FROM tbl_pelanggan p WHERE $umum AND p.id_pelanggan<>? AND $bukanMember AND NOT EXISTS (SELECT 1 FROM tbl_transaksi t WHERE t.id_pelanggan=p.id_pelanggan)")
+                ->execute([$keepId]);
+            $pdo->commit();
+        } catch (Throwable $x) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+        }
+    }
+    pengaturan_simpan($pdo, ['umum_dirapikan' => '1']);
+}
+
 function badge(string $s): string {
     $label = [
         'menunggu'   => 'Menunggu pembayaran',
@@ -267,6 +291,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'login
         header('Location: index.php');
         exit;
     }
+    usleep(500000);
     $_SESSION['login_error'] = 'Username atau password salah.';
     header('Location: index.php');
     exit;
@@ -478,15 +503,63 @@ $_SESSION['auth']['nama'] = $akunSesi['nama'];
 $_SESSION['auth']['role'] = $akunSesi['role'] === 'admin' ? 'admin' : 'kasir';
 
 $role = $_SESSION['auth']['role'];
+
+// Migrasi transaksi lama: pada instalasi yang hanya memiliki SATU akun kasir,
+// transaksi lunas tanpa id_user dapat dihubungkan secara tidak ambigu ke akun tersebut.
+// Jika ada lebih dari satu kasir, data tidak ditebak/dipindahkan.
+try {
+    $kasirCount = (int)$pdo->query("SELECT COUNT(*) FROM tbl_user WHERE role='kasir'")->fetchColumn();
+    if ($kasirCount === 1) {
+        $soleCashierId = (int)$pdo->query("SELECT id_user FROM tbl_user WHERE role='kasir' ORDER BY id_user LIMIT 1")->fetchColumn();
+        if ($soleCashierId > 0) {
+            $fixLegacy = $pdo->prepare("UPDATE tbl_transaksi SET id_user=? WHERE status_pembayaran='dibayar' AND (id_user IS NULL OR id_user=0)");
+            $fixLegacy->execute([$soleCashierId]);
+        }
+    }
+} catch (Throwable $migrationError) {
+    // Jangan sampai kegagalan migrasi menghentikan aplikasi.
+}
+
 if ($role !== 'admin' && in_array($page, ['pelanggan','view','join','subquery','procedure','function','trigger','transaction','explain'], true)) {
     $page = 'dashboard';
+}
+
+// Unduh laporan Excel (.xlsx) langsung sebagai file, tanpa dialog cetak
+if ($page === 'laporan' && ($_GET['export'] ?? '') === 'xlsx') {
+    require_once __DIR__ . '/laporan_lib.php';
+    if (!class_exists('ZipArchive')) {
+        flash('Ekstensi PHP "zip" belum aktif, jadi file Excel tidak bisa dibuat. Aktifkan extension=zip di php.ini (XAMPP), lalu restart Apache.', 'error');
+        go('laporan');
+    }
+    $perX = laporanPeriode($_GET);
+    // Kasir selalu dibatasi ke ID sesi; admin boleh memilih satu kasir atau semua.
+    $kasirFilterX = 0;
+    if ($role === 'admin') {
+        $requestedX = (int)($_GET['kasir'] ?? 0);
+        if ($requestedX > 0) {
+            $cekKasirX = $pdo->prepare("SELECT id_user FROM tbl_user WHERE id_user=? AND role='kasir' LIMIT 1");
+            $cekKasirX->execute([$requestedX]);
+            if ($cekKasirX->fetchColumn()) $kasirFilterX = $requestedX;
+        }
+    } else {
+        $kasirFilterX = (int)($_SESSION['auth']['id'] ?? 0);
+    }
+    $datX = laporanData($pdo, $perX, $STOK_MENIPIS, $kasirFilterX);
+    $slugX = trim((string)preg_replace('/[^a-z0-9]+/i', '-', $NAMA_TOKO), '-') ?: 'toko';
+    $bin = laporanXlsx($perX, $datX, $NAMA_TOKO, $role === 'admin');
+    header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    header('Content-Disposition: attachment; filename="laporan-' . strtolower($slugX) . '-' . $datX['dari'] . '_' . $datX['sampai'] . '.xlsx"');
+    header('Content-Length: ' . strlen($bin));
+    header('Cache-Control: no-store');
+    echo $bin;
+    exit;
 }
 
 // POST actions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
     try {
-        if (in_array($action, ['save_product','update_product_image','delete_product','save_customer','delete_customer','call_procedure','test_transaction','pay_cancel'], true) && $role !== 'admin') {
+        if (in_array($action, ['save_product','update_product_image','delete_product','save_customer','delete_customer','call_procedure','test_transaction','pay_cancel','save_transaction'], true) && $role !== 'admin') {
             throw new RuntimeException('Aksi ini khusus admin.');
         }
 
@@ -555,13 +628,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } elseif ($group === 'transaksi') {
                 $metode = array_values(array_intersect(array_keys($METODE_POS), (array)($_POST['metode'] ?? [])));
                 $diskon = (float)str_replace(',', '.', (string)($_POST['member_diskon_default'] ?? '5'));
-                $jam    = (int)($_POST['payment_timeout_hours'] ?? 24);
                 $stokMn = (int)($_POST['stok_menipis'] ?? 5);
                 if (!$metode) throw new RuntimeException('Aktifkan minimal satu metode pembayaran.');
                 if ($diskon < 0 || $diskon > 50) throw new RuntimeException('Diskon member bawaan harus antara 0 dan 50 persen.');
-                if ($jam < 1 || $jam > 168) throw new RuntimeException('Batas waktu pembayaran QRIS harus antara 1 dan 168 jam.');
                 if ($stokMn < 0 || $stokMn > 1000) throw new RuntimeException('Batas stok menipis harus antara 0 dan 1000.');
-                $pairs = ['metode_aktif' => implode(',', $metode), 'member_diskon_default' => $diskon, 'payment_timeout_hours' => $jam, 'stok_menipis' => $stokMn];
+                $pairs = ['metode_aktif' => implode(',', $metode), 'member_diskon_default' => $diskon, 'stok_menipis' => $stokMn];
                 $qrisLama = setting('qris_gambar');
                 $qrisBaru = uploadImage('qris', 'toko');
                 if ($qrisBaru !== null) {
@@ -667,12 +738,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if ($action === 'save_transaction') {
-            $id      = (int)$_POST['id_pelanggan'];
-            $tanggal = $_POST['tanggal'] ?: date('Y-m-d');
-            $total   = (float)$_POST['total_belanja'];
+            $id      = (int)($_POST['id_pelanggan'] ?? 0);
+            $tanggal = trim((string)($_POST['tanggal'] ?? '')) ?: date('Y-m-d');
+            $total   = (float)($_POST['total_belanja'] ?? 0);
+            $dt = DateTime::createFromFormat('Y-m-d', $tanggal);
+            if (!$dt || $dt->format('Y-m-d') !== $tanggal) throw new RuntimeException('Format tanggal tidak valid.');
             if ($total < 0) throw new RuntimeException('Total belanja tidak boleh negatif.');
-            $st = $pdo->prepare('INSERT INTO tbl_transaksi (tanggal,id_pelanggan,total_belanja) VALUES (?,?,?)');
-            $st->execute([$tanggal, $id, $total]);
+            $cp = $pdo->prepare('SELECT COUNT(*) FROM tbl_pelanggan WHERE id_pelanggan=?');
+            $cp->execute([$id]);
+            if (!(int)$cp->fetchColumn()) throw new RuntimeException('Pilih pelanggan yang valid.');
+            $st = $pdo->prepare('INSERT INTO tbl_transaksi (tanggal,id_pelanggan,total_belanja,id_user) VALUES (?,?,?,?)');
+            $st->execute([$tanggal, $id, $total, (int)$_SESSION['auth']['id']]);
             flash('Transaksi berhasil disimpan.');
             go('transaksi');
         }
@@ -772,9 +848,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($member) {
                 $idp = (int)$member['id_pelanggan'];
             } else {
-                $pdo->prepare('INSERT INTO tbl_pelanggan(nama_pelanggan,kota) VALUES(?,?)')
-                    ->execute([$nama, trim($_POST['kota_baru'] ?? '')]);
-                $idp = (int)$pdo->lastInsertId();
+                $kotaBaru = trim($_POST['kota_baru'] ?? '');
+                $idp = 0;
+                if ($nama === 'Pelanggan Umum' && $kotaBaru === '') {
+                    $cu = $pdo->query("SELECT id_pelanggan FROM tbl_pelanggan WHERE nama_pelanggan='Pelanggan Umum' AND (kota IS NULL OR kota='') ORDER BY id_pelanggan LIMIT 1");
+                    $idp = (int)$cu->fetchColumn();
+                }
+                if ($idp < 1) {
+                    $pdo->prepare('INSERT INTO tbl_pelanggan(nama_pelanggan,kota) VALUES(?,?)')->execute([$nama, $kotaBaru]);
+                    $idp = (int)$pdo->lastInsertId();
+                }
             }
             $ids = array_map('intval', array_keys($cart));
             sort($ids);
@@ -804,12 +887,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             $isQris   = ($metode === 'qris');
             $status   = $isQris ? 'menunggu' : 'dibayar';
-            $invoice  = 'POS' . date('ymdHis');
-            $deadline = $isQris ? date('Y-m-d H:i:s', time() + ((int)$PAYMENT_TIMEOUT_HOURS * 3600)) : null;
+            $invoice  = 'TMP' . bin2hex(random_bytes(8));
+            $deadline = $isQris ? date('Y-m-d H:i:s', time() + (5 * 60)) : null;
             $paidAt   = $isQris ? null : date('Y-m-d H:i:s');
             $pdo->prepare("INSERT INTO tbl_transaksi(tanggal,id_pelanggan,total_belanja,id_user,status_pembayaran,metode_pembayaran,kode_invoice,batas_bayar,dibayar_pada,id_member,diskon_member,diskon_member_persen) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)")
                 ->execute([date('Y-m-d'), $idp, $total, (int)$_SESSION['auth']['id'], $status, $metode, $invoice, $deadline, $paidAt, $member ? (int)$member['id_member'] : null, $diskonMember, $persenMember]);
             $idT = (int)$pdo->lastInsertId();
+            $pdo->prepare('UPDATE tbl_transaksi SET kode_invoice=? WHERE id_transaksi=?')
+                ->execute(['POS' . date('ymd') . str_pad((string)$idT, 5, '0', STR_PAD_LEFT), $idT]);
             $ins = $pdo->prepare('INSERT INTO tbl_detail_transaksi(id_transaksi,id_produk,jumlah,harga_satuan,subtotal) VALUES(?,?,?,?,?)');
             $dec = $pdo->prepare($isQris
                 ? 'UPDATE tbl_produk SET stok=stok-? WHERE id_produk=?'
@@ -848,8 +933,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($action === 'pay_confirm') {
             $idT = (int)($_POST['id_transaksi'] ?? 0);
             $pdo->beginTransaction();
-            $st = $pdo->prepare('SELECT status_pembayaran FROM tbl_transaksi WHERE id_transaksi=? FOR UPDATE');
-            $st->execute([$idT]);
+            $sqlLock = 'SELECT status_pembayaran FROM tbl_transaksi WHERE id_transaksi=?';
+            $lockArgs = [$idT];
+            if ($role !== 'admin') {
+                $sqlLock .= ' AND id_user=?';
+                $lockArgs[] = (int)$_SESSION['auth']['id'];
+            }
+            $st = $pdo->prepare($sqlLock . ' FOR UPDATE');
+            $st->execute($lockArgs);
             $s0 = $st->fetchColumn();
             if ($s0 !== 'menunggu') throw new RuntimeException('Pesanan ini tidak dalam status menunggu pembayaran.');
             $pdo->prepare("UPDATE tbl_transaksi SET status_pembayaran='dibayar',dibayar_pada=? WHERE id_transaksi=?")
@@ -864,8 +955,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($action === 'pay_cancel') {
             $idT = (int)($_POST['id_transaksi'] ?? 0);
             $pdo->beginTransaction();
-            $u = $pdo->prepare("UPDATE tbl_transaksi SET status_pembayaran='dibatalkan' WHERE id_transaksi=? AND status_pembayaran='menunggu'");
-            $u->execute([$idT]);
+            $sqlCancel = "UPDATE tbl_transaksi SET status_pembayaran='dibatalkan' WHERE id_transaksi=? AND status_pembayaran='menunggu'";
+            $cancelArgs = [$idT];
+            if ($role !== 'admin') {
+                $sqlCancel .= ' AND id_user=?';
+                $cancelArgs[] = (int)$_SESSION['auth']['id'];
+            }
+            $u = $pdo->prepare($sqlCancel);
+            $u->execute($cancelArgs);
             if ($u->rowCount() < 1) {
                 throw new RuntimeException('Hanya pesanan yang menunggu pembayaran yang bisa dibatalkan.');
             }
@@ -1064,11 +1161,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo->beginTransaction();
             $customer = (int)$pdo->query('SELECT id_pelanggan FROM tbl_pelanggan ORDER BY id_pelanggan LIMIT 1')->fetchColumn();
             if (!$customer) throw new RuntimeException('Tambahkan minimal satu pelanggan untuk menguji transaksi.');
-            $st = $pdo->prepare('INSERT INTO tbl_transaksi (tanggal,id_pelanggan,total_belanja) VALUES (?,?,?)');
-            $st->execute([date('Y-m-d'), $customer, 12345]);
+            // Data uji ditandai 'dibatalkan' supaya tidak masuk pendapatan/laporan.
+            $st = $pdo->prepare("INSERT INTO tbl_transaksi (tanggal,id_pelanggan,total_belanja,status_pembayaran,metode_pembayaran,kode_invoice) VALUES (?,?,?,'dibatalkan','uji',?)");
+            $st->execute([date('Y-m-d'), $customer, 12345, 'UJI' . date('ymdHis')]);
             if ($mode === 'commit') {
                 $pdo->commit();
-                flash('COMMIT berhasil. Data uji tersimpan di tabel transaksi.');
+                flash('COMMIT berhasil. Data uji tersimpan di tabel transaksi (berstatus Dibatalkan, tidak dihitung di laporan).');
             } else {
                 $pdo->rollBack();
                 flash('ROLLBACK berhasil. Data uji dibatalkan dan tidak tersimpan.');
@@ -1086,12 +1184,39 @@ $flash     = $_SESSION['flash'] ?? null;
 unset($_SESSION['flash']);
 $search    = trim($_GET['q'] ?? '');
 $customers = $pdo->query('SELECT * FROM tbl_pelanggan ORDER BY id_pelanggan DESC')->fetchAll();
-$stats     = [
-    'customers'    => (int)$pdo->query('SELECT COUNT(*) FROM tbl_pelanggan')->fetchColumn(),
-    'transactions' => (int)$pdo->query('SELECT COUNT(*) FROM tbl_transaksi')->fetchColumn(),
-    'revenue'      => (float)$pdo->query("SELECT COALESCE(SUM(total_belanja),0) FROM tbl_transaksi WHERE status_pembayaran='dibayar'")->fetchColumn(),
-    'cities'       => (int)$pdo->query('SELECT COUNT(DISTINCT kota) FROM tbl_pelanggan')->fetchColumn(),
-];
+$stats = [];
+if ($role === 'admin') {
+    $stats = [
+        'customers'    => (int)$pdo->query('SELECT COUNT(*) FROM tbl_pelanggan')->fetchColumn(),
+        'transactions' => (int)$pdo->query("SELECT COUNT(*) FROM tbl_transaksi WHERE status_pembayaran='dibayar'")->fetchColumn(),
+        'revenue'      => (float)$pdo->query("SELECT COALESCE(SUM(total_belanja),0) FROM tbl_transaksi WHERE status_pembayaran='dibayar'")->fetchColumn(),
+        'cities'       => (int)$pdo->query("SELECT COUNT(DISTINCT kota) FROM tbl_pelanggan WHERE kota IS NOT NULL AND kota<>''")->fetchColumn(),
+        'sellers'      => (int)$pdo->query("SELECT COUNT(*) FROM tbl_user WHERE role='kasir'")->fetchColumn(),
+    ];
+} else {
+    // Dashboard kasir hanya menghitung pelanggan dan transaksi yang terkait dengan akun login.
+    $cashierId = (int)($_SESSION['auth']['id'] ?? 0);
+    $qStats = $pdo->prepare("SELECT COUNT(*) transactions,
+        COALESCE(SUM(total_belanja),0) revenue,
+        COUNT(DISTINCT id_pelanggan) customers
+        FROM tbl_transaksi
+        WHERE status_pembayaran='dibayar' AND id_user=?");
+    $qStats->execute([$cashierId]);
+    $ownStats = $qStats->fetch(PDO::FETCH_ASSOC) ?: [];
+    $qCities = $pdo->prepare("SELECT COUNT(DISTINCT p.kota)
+        FROM tbl_transaksi t
+        JOIN tbl_pelanggan p ON p.id_pelanggan=t.id_pelanggan
+        WHERE t.status_pembayaran='dibayar' AND t.id_user=?
+        AND p.kota IS NOT NULL AND p.kota<>''");
+    $qCities->execute([$cashierId]);
+    $stats = [
+        'customers'    => (int)($ownStats['customers'] ?? 0),
+        'transactions' => (int)($ownStats['transactions'] ?? 0),
+        'revenue'      => (float)($ownStats['revenue'] ?? 0),
+        'cities'       => (int)$qCities->fetchColumn(),
+        'sellers'      => 0,
+    ];
+}
 
 $titleMap = [
     'dashboard'  => 'Dashboard',
@@ -1128,7 +1253,7 @@ function rows(PDO $pdo, string $sql): array {
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="assets/style.css?v=laporan-fix-2">
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="assets/barcode.js"></script>
 
@@ -1166,7 +1291,7 @@ function rows(PDO $pdo, string $sql): array {
   <?php endif ?>
   <div class="sidebar-bottom">
     <div class="rocket">🚀</div>
-    <b>TokoKu Database</b>
+    <b><?= e($NAMA_TOKO) ?></b>
     <small><?= $role==='admin' ? 'Kelola dan uji data tokomu.' : 'Layani transaksi pelanggan dengan cepat.' ?></small>
     <span>PHP Native · MySQL</span>
   </div>
@@ -1179,7 +1304,7 @@ function rows(PDO $pdo, string $sql): array {
   <div class="top-actions">
     <span class="status-dot"></span>
     <span>Mode toko offline</span>
-    <a class="avatar" href="?page=pengaturan" title="Pengaturan akun"><?= e(strtoupper(substr($_SESSION['auth']['nama'], 0, 1))) ?></a>
+    <a class="avatar" href="?page=pengaturan" title="Pengaturan akun"><?= e(mb_strtoupper(mb_substr($_SESSION['auth']['nama'], 0, 1))) ?></a>
     <b><?= e($_SESSION['auth']['nama']) ?> · <?= e(strtoupper($role)) ?></b>
     <a class="text-link" href="?logout=1">Keluar</a>
   </div>
@@ -1190,7 +1315,7 @@ function rows(PDO $pdo, string $sql): array {
   <div>
     <div class="eyebrow"><?= e(strtoupper($NAMA_TOKO)) ?> / <?= e(strtoupper($role)) ?></div>
     <h1><?= e($title) ?></h1>
-    <p><?= $page==='dashboard' ? 'Pantau aktivitas dan performa tokomu hari ini.' : ($page==='pengaturan' ? 'Atur akun, identitas toko, struk, dan cara kasir bekerja.' : ($page==='produk' ? 'Temukan berbagai pilihan produk terbaik di TokoKu.' : ($role==='admin' ? 'Kelola data dan jalankan pengujian database db_tokoku2.' : 'Lihat ringkasan data toko dan cetak laporan.'))) ?></p>
+    <p><?= $page==='dashboard' ? 'Pantau aktivitas dan performa tokomu hari ini.' : ($page==='laporan' ? 'Analisis penjualan, produk, pelanggan, dan kinerja kasir. Unduh sebagai PDF atau Excel.' : ($page==='pengaturan' ? 'Atur akun, identitas toko, struk, dan cara kasir bekerja.' : ($page==='produk' ? 'Temukan berbagai pilihan produk terbaik di ' . e($NAMA_TOKO) . '.' : ($role==='admin' ? 'Kelola data dan jalankan pengujian database db_tokoku2.' : 'Lihat ringkasan data toko dan cetak laporan.')))) ?></p>
   </div>
   <div class="date-chip">◷ <?= date('d M Y') ?></div>
 </div>
@@ -1218,9 +1343,12 @@ if ($STOK_MENIPIS > 0) {
 <?php endif ?>
 <div class="stats-grid">
   <div class="stat-card blue"><div class="stat-icon">♙</div><span>Total Pelanggan</span><strong><?= $stats['customers'] ?></strong><small>Data pelanggan terdaftar</small><div class="spark">⌁</div></div>
-  <div class="stat-card green"><div class="stat-icon">▤</div><span>Total Transaksi</span><strong><?= $stats['transactions'] ?></strong><small>Seluruh transaksi tercatat</small><div class="spark">⌁</div></div>
+  <div class="stat-card green"><div class="stat-icon">▤</div><span>Total Transaksi</span><strong><?= $stats['transactions'] ?></strong><small>Transaksi lunas</small><div class="spark">⌁</div></div>
   <div class="stat-card orange"><div class="stat-icon">◈</div><span>Total Pendapatan</span><strong><?= rupiah($stats['revenue']) ?></strong><small>Akumulasi transaksi lunas</small><div class="spark">⌁</div></div>
   <div class="stat-card purple"><div class="stat-icon">⌖</div><span>Kota Pelanggan</span><strong><?= $stats['cities'] ?></strong><small>Kota berbeda</small><div class="spark">⌁</div></div>
+  <?php if ($role === 'admin'): ?>
+  <div class="stat-card blue"><div class="stat-icon">♟</div><span>Total Kasir</span><strong><?= $stats['sellers'] ?></strong><small>Akun kasir terdaftar</small><div class="spark">⌁</div></div>
+  <?php endif ?>
 </div>
 <div class="dashboard-grid"<?= $role!=='admin' ? ' style="grid-template-columns:1fr"' : '' ?>>
   <div class="panel chart-panel">
@@ -1240,7 +1368,15 @@ if ($STOK_MENIPIS > 0) {
 </div>
 <div class="panel table-panel">
   <div class="panel-head"><div><h3>Transaksi Terbaru</h3><p>Data transaksi terakhir dari database</p></div><a class="text-link" href="?page=transaksi">Lihat semua ↗</a></div>
-  <?php $recent = rows($pdo, "SELECT t.id_transaksi,t.tanggal,p.nama_pelanggan,t.total_belanja FROM tbl_transaksi t LEFT JOIN tbl_pelanggan p ON p.id_pelanggan=t.id_pelanggan ORDER BY t.id_transaksi DESC LIMIT 5"); ?>
+  <?php
+  if ($role === 'admin') {
+      $recent = rows($pdo, "SELECT t.id_transaksi,t.tanggal,p.nama_pelanggan,t.total_belanja FROM tbl_transaksi t LEFT JOIN tbl_pelanggan p ON p.id_pelanggan=t.id_pelanggan ORDER BY t.id_transaksi DESC LIMIT 5");
+  } else {
+      $recentStmt = $pdo->prepare("SELECT t.id_transaksi,t.tanggal,p.nama_pelanggan,t.total_belanja FROM tbl_transaksi t LEFT JOIN tbl_pelanggan p ON p.id_pelanggan=t.id_pelanggan WHERE t.id_user=? ORDER BY t.id_transaksi DESC LIMIT 5");
+      $recentStmt->execute([(int)$_SESSION['auth']['id']]);
+      $recent = $recentStmt->fetchAll();
+  }
+?>
   <?php renderTable($recent, ['id_transaksi'=>'ID','nama_pelanggan'=>'Pelanggan','tanggal'=>'Tanggal','total_belanja'=>'Total'], 'money'); ?>
 </div>
 
@@ -1281,7 +1417,7 @@ $products = $st->fetchAll();
 <?= scanBar('produk') ?>
 <div class="catalog-toolbar">
   <div>
-    <span class="catalog-kicker">TOKOKU MARKETPLACE</span>
+    <span class="catalog-kicker"><?= e(strtoupper($NAMA_TOKO)) ?> MARKETPLACE</span>
     <h2>Temukan produk favoritmu</h2>
     <p>Belanja lebih mudah, pilihan lebih banyak.</p>
   </div>
@@ -1529,8 +1665,14 @@ if ($cart) {
 <?php elseif ($page === 'bayar'): ?>
 <?php
 $idT  = (int)($_GET['id'] ?? 0);
-$st   = $pdo->prepare('SELECT t.*,p.nama_pelanggan,p.kota FROM tbl_transaksi t LEFT JOIN tbl_pelanggan p ON p.id_pelanggan=t.id_pelanggan WHERE t.id_transaksi=?');
-$st->execute([$idT]);
+$sqlOrder = 'SELECT t.*,p.nama_pelanggan,p.kota FROM tbl_transaksi t LEFT JOIN tbl_pelanggan p ON p.id_pelanggan=t.id_pelanggan WHERE t.id_transaksi=?';
+$orderArgs = [$idT];
+if ($role !== 'admin') {
+    $sqlOrder .= ' AND t.id_user=?';
+    $orderArgs[] = (int)$_SESSION['auth']['id'];
+}
+$st = $pdo->prepare($sqlOrder);
+$st->execute($orderArgs);
 $order = $st->fetch();
 $items = [];
 $m     = null;
@@ -1883,7 +2025,7 @@ $qrisAda  = $qrisFile !== '' && is_file(__DIR__ . '/' . $qrisFile);
       <div class="set-form">
         <label>Diskon member bawaan (%)<input type="number" name="member_diskon_default" min="0" max="50" step="0.5" value="<?= e((float)$MEMBER_DISKON_DEFAULT) ?>"></label>
         <p class="set-note">Dipakai sebagai nilai awal saat mendaftarkan member baru. Diskon member yang sudah ada tidak berubah.</p>
-        <label>Batas waktu bayar QRIS (jam)<input type="number" name="payment_timeout_hours" min="1" max="168" value="<?= (int)$PAYMENT_TIMEOUT_HOURS ?>"></label>
+        <label>Batas waktu bayar QRIS</label><p class="set-note"><b>5 menit</b> — pesanan QRIS otomatis kedaluwarsa jika belum dibayar dalam 5 menit.</p>
         <p class="set-note">Pesanan QRIS yang belum dibayar lewat batas ini otomatis kedaluwarsa dan stoknya kembali.</p>
         <label>Peringatan stok menipis (pcs)<input type="number" name="stok_menipis" min="0" max="1000" value="<?= (int)$STOK_MENIPIS ?>"></label>
         <p class="set-note">Produk dengan stok sama atau di bawah angka ini diberi tanda di katalog dan dashboard. Isi 0 untuk mematikan.</p>
@@ -2010,6 +2152,7 @@ $meId = (int)$_SESSION['auth']['id'];
 </div>
 
 <?php elseif ($page === 'transaksi'): ?>
+<?php if ($role === 'admin'): ?>
 <div class="panel form-panel">
   <div class="panel-head"><div><h3>Tambah Transaksi Manual</h3><p>Dicatat langsung lunas (untuk pengujian database). Belanja dari keranjang harus dibayar dulu.</p></div></div>
   <form method="post" class="inline-form">
@@ -2025,29 +2168,65 @@ $meId = (int)$_SESSION['auth']['id'];
     <button class="btn primary">＋ Simpan Transaksi</button>
   </form>
 </div>
+<?php endif ?>
 <div class="panel table-panel">
   <div class="panel-head"><div><h3>Riwayat Transaksi</h3><p>Transaksi dan pelanggan digabungkan dengan JOIN</p></div></div>
   <?php
-  $fs  = $_GET['status'] ?? '';
-  $sql = "SELECT t.*,p.nama_pelanggan,p.kota FROM tbl_transaksi t LEFT JOIN tbl_pelanggan p ON t.id_pelanggan=p.id_pelanggan WHERE (COALESCE(p.nama_pelanggan,'') LIKE ? OR COALESCE(t.kode_invoice,'') LIKE ?)";
-  $args = ["%$search%", "%$search%"];
+  $fs = $_GET['status'] ?? '';
+  $kasirFilter = $role === 'admin' ? (int)($_GET['kasir'] ?? 0) : 0;
+  $cariTransaksi = trim((string)($_GET['cari_transaksi'] ?? ''));
+  $kasirOptions = $role === 'admin'
+      ? rows($pdo, "SELECT id_user,nama FROM tbl_user WHERE role='kasir' ORDER BY nama")
+      : [];
+  $sql = "SELECT t.*,p.nama_pelanggan,p.kota,u.nama AS nama_kasir
+          FROM tbl_transaksi t
+          LEFT JOIN tbl_pelanggan p ON p.id_pelanggan=t.id_pelanggan
+          LEFT JOIN tbl_user u ON u.id_user=t.id_user
+          WHERE (COALESCE(p.nama_pelanggan,'') LIKE ? OR COALESCE(t.kode_invoice,'') LIKE ?)";
+  $args = ["%$cariTransaksi%", "%$cariTransaksi%"];
+  if ($role !== 'admin') {
+      $sql .= ' AND t.id_user = ?';
+      $args[] = (int)$_SESSION['auth']['id'];
+  } elseif ($kasirFilter > 0) {
+      $sql .= ' AND t.id_user = ?';
+      $args[] = $kasirFilter;
+  }
   if (in_array($fs, ['menunggu','dibayar','dibatalkan','kedaluwarsa'], true)) {
-      $sql   .= ' AND t.status_pembayaran=?';
+      $sql .= ' AND t.status_pembayaran=?';
       $args[] = $fs;
   }
   $st = $pdo->prepare($sql . ' ORDER BY t.id_transaksi DESC');
   $st->execute($args);
   $trx = $st->fetchAll();
+  $queryBase = ['page'=>'transaksi'];
+  if ($kasirFilter > 0 && $role === 'admin') $queryBase['kasir'] = $kasirFilter;
+  if ($cariTransaksi !== '') $queryBase['cari_transaksi'] = $cariTransaksi;
   ?>
+  <form method="get" class="inline-form" style="margin:0 0 14px">
+    <input type="hidden" name="page" value="transaksi">
+    <input name="cari_transaksi" value="<?= e($cariTransaksi) ?>" placeholder="Cari invoice atau nama pelanggan">
+    <?php if ($role === 'admin'): ?>
+    <select name="kasir">
+      <option value="0">Semua Kasir</option>
+      <?php foreach ($kasirOptions as $k): ?>
+      <option value="<?= (int)$k['id_user'] ?>" <?= $kasirFilter===(int)$k['id_user']?'selected':'' ?>><?= e($k['nama']) ?></option>
+      <?php endforeach ?>
+    </select>
+    <?php endif ?>
+    <?php if ($fs !== ''): ?><input type="hidden" name="status" value="<?= e($fs) ?>"><?php endif ?>
+    <button class="btn primary">Terapkan</button>
+    <a class="btn" href="?page=transaksi">Reset</a>
+  </form>
   <div class="category-chips" style="margin:0 0 14px">
-    <a class="<?= $fs===''?'selected':'' ?>" href="?page=transaksi">Semua</a>
+    <?php $statusBase = $queryBase; ?>
+    <a class="<?= $fs===''?'selected':'' ?>" href="?<?= e(http_build_query($statusBase)) ?>">Semua</a>
     <?php foreach (['menunggu'=>'Menunggu bayar','dibayar'=>'Lunas','dibatalkan'=>'Dibatalkan','kedaluwarsa'=>'Kedaluwarsa'] as $k => $l): ?>
-    <a class="<?= $fs===$k?'selected':'' ?>" href="?page=transaksi&status=<?= $k ?>"><?= $l ?></a>
+    <a class="<?= $fs===$k?'selected':'' ?>" href="?<?= e(http_build_query($statusBase + ['status'=>$k])) ?>"><?= $l ?></a>
     <?php endforeach ?>
   </div>
   <div class="table-wrap">
     <table>
-      <thead><tr><th>ID</th><th>Invoice</th><th>Tanggal</th><th>Pelanggan</th><th>Metode</th><th>Total</th><th>Status</th><th>Aksi</th></tr></thead>
+      <thead><tr><th>ID</th><th>Invoice</th><th>Tanggal</th><th>Pelanggan</th><th>Nama Kasir</th><th>Metode</th><th>Total</th><th>Status</th><th>Aksi</th></tr></thead>
       <tbody>
       <?php foreach ($trx as $r): ?>
         <tr>
@@ -2055,189 +2234,39 @@ $meId = (int)$_SESSION['auth']['id'];
           <td><?= e($r['kode_invoice'] ?: '-') ?></td>
           <td><?= e($r['tanggal']) ?></td>
           <td><?= e($r['nama_pelanggan']) ?> <small style="color:#8999b8"><?= e($r['kota']) ?></small></td>
+          <td><?= e($r['nama_kasir'] ?: '-') ?></td>
           <td><?= e($PAYMENT_METHODS[$r['metode_pembayaran'] ?? '']['label'] ?? 'Manual') ?></td>
           <td><?= rupiah($r['total_belanja']) ?></td>
           <td><?= badge((string)$r['status_pembayaran']) ?></td>
           <td><a class="btn tiny" href="?page=bayar&id=<?= $r['id_transaksi'] ?>"><?= $r['status_pembayaran']==='menunggu' ? 'Bayar' : 'Detail' ?></a></td>
         </tr>
       <?php endforeach ?>
-      <?php if (!$trx): ?><tr><td colspan="8" class="empty">Tidak ada transaksi.</td></tr><?php endif ?>
+      <?php if (!$trx): ?><tr><td colspan="9" class="empty">Tidak ada transaksi.</td></tr><?php endif ?>
       </tbody>
     </table>
   </div>
 </div>
 
-<?php elseif($page==='laporan' || $page==='view'): ?>
-<div class="info-banner">
-  <b><?= $role==='admin' ? 'VIEW Database' : 'Laporan Toko' ?></b>
-  <span><?= $role==='admin' ? 'Data berikut diambil langsung dari view yang sudah tersedia pada db_tokoku2.' : 'Rekap pelanggan dan transaksi toko. Anda dapat mencetak atau mengunduh PDF.' ?></span>
+<?php elseif ($page === 'laporan'): ?>
+<?php include __DIR__ . '/laporan_view.php'; ?>
+
+<?php elseif ($page === 'view'): ?>
+<div class="info-banner"><b>VIEW Database</b><span>Data berikut diambil langsung dari view yang sudah tersedia pada db_tokoku2.</span></div>
+
+<div class="panel table-panel">
+  <div class="panel-head"><div><h3>view_pelanggan</h3><p>Daftar pelanggan melalui VIEW</p></div></div>
+  <?php renderTable(rows($pdo,'SELECT * FROM view_pelanggan'),['id_pelanggan'=>'ID','nama_pelanggan'=>'Nama','kota'=>'Kota']); ?>
 </div>
 
-<div class="report-toolbar">
-  <button type="button" class="btn primary" onclick="window.print()">🖨 Cetak Laporan</button>
-  <button type="button" class="btn tiny" id="btnPdf" onclick="downloadReportPdf()">⬇ Unduh PDF</button>
+<div class="panel table-panel">
+  <div class="panel-head"><div><h3>view_total_belanja</h3><p>Rekap transaksi dan total belanja per pelanggan</p></div></div>
+  <?php renderTable(rows($pdo,'SELECT * FROM view_total_belanja'),['id_pelanggan'=>'ID','nama_pelanggan'=>'Pelanggan','total_transaksi'=>'Jumlah Transaksi','total_belanja'=>'Total Belanja'],'money'); ?>
 </div>
 
-<div id="reportPrintArea">
-  <div class="report-header print-only">
-    <h2>Laporan TokoKu</h2>
-    <p>Dicetak: <?= date('d M Y H:i') ?> · <?= e($_SESSION['auth']['nama'] ?? 'Admin') ?></p>
-  </div>
-
-  <div class="panel table-panel">
-    <div class="panel-head"><div><h3>view_pelanggan</h3><p>Daftar pelanggan melalui VIEW</p></div></div>
-    <?php renderTable(rows($pdo,'SELECT * FROM view_pelanggan'),['id_pelanggan'=>'ID','nama_pelanggan'=>'Nama','kota'=>'Kota']); ?>
-  </div>
-
-  <div class="panel table-panel">
-    <div class="panel-head"><div><h3>view_total_belanja</h3><p>Rekap transaksi dan total belanja per pelanggan</p></div></div>
-    <?php renderTable(rows($pdo,'SELECT * FROM view_total_belanja'),['id_pelanggan'=>'ID','nama_pelanggan'=>'Pelanggan','total_transaksi'=>'Jumlah Transaksi','total_belanja'=>'Total Belanja'],'money'); ?>
-  </div>
-
-  <div class="panel table-panel">
-    <div class="panel-head"><div><h3>view_transaksi_pelanggan</h3><p>Detail transaksi melalui VIEW</p></div></div>
-    <?php renderTable(rows($pdo,'SELECT * FROM view_transaksi_pelanggan ORDER BY tanggal DESC'),['id_transaksi'=>'ID','tanggal'=>'Tanggal','nama_pelanggan'=>'Pelanggan','kota'=>'Kota','total_belanja'=>'Total'],'money'); ?>
-  </div>
+<div class="panel table-panel">
+  <div class="panel-head"><div><h3>view_transaksi_pelanggan</h3><p>Detail transaksi melalui VIEW</p></div></div>
+  <?php renderTable(rows($pdo,'SELECT * FROM view_transaksi_pelanggan ORDER BY tanggal DESC'),['id_transaksi'=>'ID','tanggal'=>'Tanggal','nama_pelanggan'=>'Pelanggan','kota'=>'Kota','total_belanja'=>'Total'],'money'); ?>
 </div>
-
-
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-<script>
-function downloadReportPdf() {
-    const report = document.getElementById('reportPrintArea');
-    const button = document.getElementById('btnPdf');
-
-    if (!report) {
-        alert('Area laporan tidak ditemukan.');
-        return;
-    }
-
-    // Hapus style cetak sebelumnya jika masih ada.
-    const oldStyle = document.getElementById('reportPdfPrintStyle');
-    if (oldStyle) oldStyle.remove();
-
-    const style = document.createElement('style');
-    style.id = 'reportPdfPrintStyle';
-
-    style.textContent = `
-        @media print {
-            @page {
-                size: A4 portrait;
-                margin: 12mm;
-            }
-
-            body * {
-                visibility: hidden !important;
-            }
-
-            #reportPrintArea,
-            #reportPrintArea * {
-                visibility: visible !important;
-            }
-
-            #reportPrintArea {
-                position: absolute !important;
-                left: 0 !important;
-                top: 0 !important;
-                width: 100% !important;
-                padding: 0 !important;
-                margin: 0 !important;
-                background: #ffffff !important;
-                color: #111111 !important;
-                font-family: Arial, sans-serif !important;
-            }
-
-            #reportPrintArea .print-only {
-                display: block !important;
-                margin-bottom: 18px !important;
-            }
-
-            #reportPrintArea .panel {
-                display: block !important;
-                width: 100% !important;
-                margin-bottom: 18px !important;
-                padding: 10px !important;
-                background: #ffffff !important;
-                color: #111111 !important;
-                border: 1px solid #999999 !important;
-                box-shadow: none !important;
-                break-inside: auto !important;
-                page-break-inside: auto !important;
-            }
-
-            #reportPrintArea .panel-head {
-                display: block !important;
-                margin-bottom: 10px !important;
-            }
-
-            #reportPrintArea .table-wrap {
-                width: 100% !important;
-                overflow: visible !important;
-            }
-
-            #reportPrintArea table {
-                width: 100% !important;
-                border-collapse: collapse !important;
-                font-size: 10px !important;
-            }
-
-            #reportPrintArea th,
-            #reportPrintArea td {
-                border: 1px solid #777777 !important;
-                padding: 6px !important;
-                color: #111111 !important;
-                background: #ffffff !important;
-                text-align: left !important;
-            }
-
-            #reportPrintArea th {
-                background: #e5e7eb !important;
-                font-weight: bold !important;
-            }
-
-            #reportPrintArea button,
-            #reportPrintArea .btn {
-                display: none !important;
-            }
-
-            .report-toolbar,
-            .info-banner,
-            header,
-            nav,
-            aside,
-            footer {
-                display: none !important;
-            }
-        }
-    `;
-
-    document.head.appendChild(style);
-
-    if (button) {
-        button.disabled = true;
-        button.textContent = 'Membuka cetak...';
-    }
-
-    function selesaiCetak() {
-        style.remove();
-
-        if (button) {
-            button.disabled = false;
-            button.textContent = '⬇ Unduh PDF';
-        }
-
-        window.removeEventListener('afterprint', selesaiCetak);
-    }
-
-    window.addEventListener('afterprint', selesaiCetak);
-
-    // Beri waktu browser menerapkan CSS cetak.
-    setTimeout(function () {
-        window.print();
-    }, 300);
-}
-</script>
-
 
 <?php elseif ($page === 'join'): ?>
 <div class="info-banner"><b>JOIN: tbl_transaksi + tbl_pelanggan</b><span>Menggabungkan data transaksi dengan informasi pemilik transaksi.</span></div>
@@ -2531,7 +2560,15 @@ function procedureFields() {
 }
 <?php if ($page === 'procedure'): ?>procedureFields();<?php endif ?>
 <?php if ($page === 'dashboard'): ?>
-<?php $chart = rows($pdo, "SELECT DATE_FORMAT(tanggal,'%d %b') label,COUNT(*) jumlah FROM tbl_transaksi GROUP BY tanggal ORDER BY tanggal"); ?>
+<?php
+if ($role === 'admin') {
+    $chart = rows($pdo, "SELECT DATE_FORMAT(tanggal,'%d %b') label,COUNT(*) jumlah FROM tbl_transaksi WHERE status_pembayaran='dibayar' GROUP BY DATE(tanggal) ORDER BY DATE(tanggal)");
+} else {
+    $chartStmt = $pdo->prepare("SELECT DATE_FORMAT(tanggal,'%d %b') label,COUNT(*) jumlah FROM tbl_transaksi WHERE status_pembayaran='dibayar' AND id_user=? GROUP BY DATE(tanggal) ORDER BY DATE(tanggal)");
+    $chartStmt->execute([(int)($_SESSION['auth']['id'] ?? 0)]);
+    $chart = $chartStmt->fetchAll(PDO::FETCH_ASSOC);
+}
+?>
 new Chart(document.getElementById('salesChart'), {
   type: 'line',
   data: {
@@ -2574,7 +2611,7 @@ function renderTable(array $data, array $labels = [], string $moneyKey = ''): vo
         echo '<tr>';
         foreach ($labels as $key => $label) {
             $v = $row[$key] ?? '';
-            if ($key === $moneyKey || (str_contains(strtolower($key), 'total') && is_numeric($v))) {
+            if ($key === $moneyKey || (str_contains(strtolower($key), 'total') && !str_contains(strtolower($key), 'transaksi') && is_numeric($v))) {
                 $v = rupiah($v);
             }
             echo '<td>' . e($v) . '</td>';
